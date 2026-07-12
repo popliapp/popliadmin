@@ -107,8 +107,8 @@ export const DashboardPage: React.FC = () => {
               { title: 'Active Creators', value: formatNumber(activeUsersCount), desc: 'CLEARANCE SECURED VIBES', icon: Activity, color: '#00D8F6' },
               { title: 'Total Uploaded Reels', value: formatNumber(totalReelsCount), desc: 'CONTENT REPOSITORY BLOCK', icon: Video, color: '#FF7C00' },
               { title: 'Cumulative Views', value: formatNumber(totalViewsCount), desc: 'WATCH LOOP VOLUMETRIC', icon: Eye, color: '#FF2A00' },
-              { title: 'Distributed Coins', value: formatNumber(totalCoinsDistributed), desc: 'VIRTUAL COIN CIRCULATION', icon: Coins, color: '#0ea5e9' },
-              { title: 'Gift Revenue', value: '₹' + formatNumber(totalCoinsDistributed * 1.25), desc: 'COMMERCE INFLOW INR', icon: Gift, color: '#00D8F6' },
+             { title: 'Distributed Coins', value: formatNumber(dashboardStats?.distributedCoins || 0), desc: 'VIRTUAL COIN CIRCULATION', icon: Coins, color: '#0ea5e9' },
+      { title: 'Gift Revenue', value: '₹' + formatNumber((dashboardStats?.giftRevenue || 0) * 0.85), desc: 'COMMERCE INFLOW INR', icon: Gift, color: '#00D8F6' },
               { title: 'Avg Watch Time', value: '43.2 Min', desc: 'SESSION DOPAMINE DEPTH', icon: Clock, color: '#FF7C00' },
               { title: 'Virality Accel', value: '88%', desc: 'RECOMMENDER EXPONENTIAL', icon: TrendingUp, color: '#FF2A00' }
             ].map((widget, i) => {
