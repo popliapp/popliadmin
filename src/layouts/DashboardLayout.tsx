@@ -204,7 +204,7 @@ return (
         >
        <Link to="/" className="flex items-center gap-3 min-w-0">
             <img
-              src="/src/assets/adaptive-icon.png"
+           src="/adaptive-icon.png"
               alt="POPLI"
               className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
             />
@@ -268,7 +268,7 @@ return (
               >
               <div className="flex items-center gap-3">
                   <img
-                    src="/src/assets/adaptive-icon.png"
+                   src="/adaptive-icon.png"
                     alt="POPLI"
                     className="w-8 h-8 rounded-lg object-cover"
                   />

@@ -124,7 +124,7 @@ useEffect(() => {
       <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4">
   <div className="flex items-center gap-2.5">
           <img
-            src="/src/assets/adaptive-icon.png"
+          src="/adaptive-icon.png"
             alt="POPLI"
             className="w-8 h-8 rounded-lg object-cover"
           />
@@ -164,7 +164,7 @@ useEffect(() => {
             <div className="mb-10">
          <div className="w-14 h-14 rounded-2xl overflow-hidden mb-8">
                 <img
-                  src="/src/assets/adaptive-icon.png"
+                src="/adaptive-icon.png"
                   alt="POPLI"
                   className="w-full h-full object-cover"
                 />
@@ -231,7 +231,7 @@ useEffect(() => {
                 <div className="lg:hidden flex items-center gap-2.5 mb-6">
               <div className="w-9 h-9 rounded-xl overflow-hidden">
                     <img
-                      src="/src/assets/adaptive-icon.png"
+                      src="/adaptive-icon.png"
                       alt="POPLI"
                       className="w-full h-full object-cover"
                     />
