@@ -27,7 +27,7 @@ export const AppProviders: React.FC<ProvidersProps> = ({ children }) => {
         <QueryClientProvider client={queryClient}>
           {children}
           <Toaster 
-            position="top-right"
+          position="bottom-right"
             toastOptions={{
               className: 'text-sm font-medium font-sans select-none rounded-xl shadow-xl border border-border/50',
               style: {

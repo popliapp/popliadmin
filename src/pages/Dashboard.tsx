@@ -1,296 +1,553 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRegisterRefresh } from '../hooks/useRegisterRefresh';
 import { usePlatformStore } from '../store/usePlatformStore';
-import { 
-  Users as UsersIcon, 
-  Video, 
-  Eye, 
-  TrendingUp, 
-  Coins, 
-  Gift, 
-  Clock, 
-  Zap, 
-  Activity 
+import { adminService } from '@/services/adminService';
+import {
+  Users as UsersIcon,
+  Video,
+  Eye,
+  TrendingUp,
+  Coins,
+  Gift,
+  Clock,
+  Activity,
+  Globe,
+  ChevronDown,
+  ShieldCheck,
+  AlertTriangle,
+  Shield,
+  X,
 } from 'lucide-react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import toast from 'react-hot-toast';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
-  Cell
+  Cell,
 } from 'recharts';
 import { cn } from '@/utils/cn';
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-card border border-border rounded-lg shadow-lg px-3 py-2.5 text-[12px]">
+        <p className="text-muted-foreground font-medium mb-1">{label}</p>
+        {payload.map((entry: any, i: number) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
+            <span className="text-foreground font-semibold">{entry.value.toLocaleString()} {entry.name}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
+const GrowthChart = ({ data, tab }: { data: any[]; tab: 'Monthly' | 'Weekly' }) => {
+  const hasData = data && data.length > 0 && data.some((d) => (d.Users || d.users || 0) > 0);
+
+  if (!hasData) {
+    return (
+      <div className="h-56 flex flex-col items-center justify-center gap-3 text-center">
+        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+          <TrendingUp className="w-5 h-5 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="text-[13px] font-semibold text-foreground">No growth data yet</p>
+          <p className="text-[12px] text-muted-foreground mt-0.5">
+            Creator registrations will appear here once users sign up.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const normalized = data.map((d, i) => ({
+    label: d.name || d.month || d.week || (tab === 'Monthly' ? MONTH_LABELS[i % 12] : `W${i + 1}`),
+    Users: d.Users || d.users || d.count || 0,
+  }));
+
+  return (
+    <div className="h-56">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={normalized} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+          <defs>
+            <linearGradient id="gradUsers" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#2563eb" stopOpacity={0.12} />
+              <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid
+            strokeDasharray="0"
+            stroke="hsl(220 13% 91%)"
+            strokeOpacity={0.8}
+            vertical={false}
+          />
+          <XAxis
+            dataKey="label"
+            tick={{ fill: 'hsl(220 9% 55%)', fontSize: 11, fontFamily: 'Inter, sans-serif' }}
+            tickLine={false}
+            axisLine={false}
+            dy={8}
+          />
+          <YAxis
+            tick={{ fill: 'hsl(220 9% 55%)', fontSize: 11, fontFamily: 'Inter, sans-serif' }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
+            width={36}
+          />
+          <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#2563eb', strokeWidth: 1, strokeDasharray: '4 4' }} />
+          <Area
+            type="monotone"
+            dataKey="Users"
+            stroke="#2563eb"
+            strokeWidth={2}
+            fill="url(#gradUsers)"
+            dot={false}
+            activeDot={{ r: 4, fill: '#2563eb', stroke: '#fff', strokeWidth: 2 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+const KPICard = ({
+  title,
+  value,
+  desc,
+  icon: Icon,
+  iconBg,
+}: {
+  title: string;
+  value: string;
+  desc: string;
+  icon: React.ElementType;
+  iconBg: string;
+}) => (
+  <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
+    <div className="flex items-start justify-between">
+      <span className="text-[13px] font-medium text-muted-foreground">{title}</span>
+      <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', iconBg)}>
+        <Icon className="w-4 h-4" />
+      </div>
+    </div>
+    <div>
+      <span className="text-[28px] font-bold text-foreground leading-none tracking-tight">{value}</span>
+      <p className="text-[11px] text-muted-foreground mt-1.5 uppercase tracking-wider font-medium">{desc}</p>
+    </div>
+  </div>
+);
+
 export const DashboardPage: React.FC = () => {
-  const { creators, reels, dashboardStats } = usePlatformStore();
-  const [activeTab, setActiveTab] = useState<'overview' | 'live' | 'growth'>('overview');
+const { creators, reels, dashboardStats, fetchAllData } = usePlatformStore();
+const [growthTab, setGrowthTab] = useState<'Monthly' | 'Weekly'>('Monthly');
+const [botProtection, setBotProtection] = useState<{
+  enabled: boolean;
+  enabledAt: string | null;
+  enabledByName: string | null;
+  loading: boolean;
+}>({ enabled: false, enabledAt: null, enabledByName: null, loading: true });
+const [confirmDialog, setConfirmDialog] = useState<'enable' | 'disable' | null>(null);
+const [actionLoading, setActionLoading] = useState(false);
 
-  const userGrowthData = dashboardStats?.userGrowthData || [
-    { name: 'Jan', Users: 0, active: 0 }
+const refresh = useCallback(async () => {
+  await Promise.all([
+    fetchAllData(),
+    adminService.getBotProtectionStatus()
+      .then((data) => setBotProtection({ enabled: data.enabled, enabledAt: data.enabledAt, enabledByName: data.enabledByName ?? null, loading: false }))
+      .catch(() => {}),
+  ]);
+}, [fetchAllData]);
+
+useRegisterRefresh(refresh);
+
+useEffect(() => {
+    adminService.getBotProtectionStatus()
+      .then((data) => {
+        setBotProtection({
+          enabled: data.enabled,
+          enabledAt: data.enabledAt,
+          enabledByName: data.enabledByName ?? null,
+          loading: false,
+        });
+      })
+      .catch(() => {
+        setBotProtection((prev) => ({ ...prev, loading: false }));
+      });
+  }, []);
+
+  const handleBotProtectionConfirm = async () => {
+    setActionLoading(true);
+    try {
+      if (confirmDialog === 'enable') {
+        const res = await adminService.enableBotProtection('Enabled via admin dashboard');
+        setBotProtection({ enabled: true, enabledAt: res.enabledAt, enabledByName: null, loading: false });
+        toast.success('Bot protection enabled');
+      } else {
+        const res = await adminService.disableBotProtection('Disabled via admin dashboard');
+        setBotProtection({ enabled: false, enabledAt: null, enabledByName: null, loading: false });
+        toast.success('Bot protection disabled');
+      }
+    } catch {
+      toast.error('Action failed. Check your permissions.');
+    } finally {
+      setActionLoading(false);
+      setConfirmDialog(null);
+    }
+  };
+
+  const CITIES = [
+    { id: 'all', name: 'All India' },
+    { id: 'mumbai', name: 'Mumbai' },
+    { id: 'delhi', name: 'Delhi' },
+    { id: 'bengaluru', name: 'Bengaluru' },
+    { id: 'lucknow', name: 'Lucknow' },
+    { id: 'jaipur', name: 'Jaipur' },
+    { id: 'indore', name: 'Indore' },
+    { id: 'madurai', name: 'Madurai' },
   ];
 
-  const engagementData = dashboardStats?.engagementData || [
-    { name: 'None', uploads: 0, views: 0 }
-  ];
+  const [selectedCity, setSelectedCity] = useState('all');
 
-  const moodPieData = dashboardStats?.moodPieData || [
-    { name: 'Data Pending', value: 100, color: '#7E8A9F' }
-  ];
+  const handleCityChange = (cityId: string) => {
+    setSelectedCity(cityId);
+    (window as any).__popli_active_city_filter = cityId;
+    window.dispatchEvent(new CustomEvent('popli_city_changed', { detail: cityId }));
+  };
 
-  const liveEvents = dashboardStats?.liveEvents || [];
-
-  const hyperlocalData = dashboardStats?.hyperlocalData || [
-    { city: 'PENDING', uploads: '0 uploads', views: '0 views', heat: 'bg-green-500' }
-  ];
-
-  const heatIndicators = dashboardStats?.heatIndicators || [
-    { label: 'Data Pending', percent: '0%', desc: 'Waiting for server...', color: 'bg-muted' }
-  ];
+const userGrowthData = dashboardStats?.userGrowthData || [];
+  const moodPieData: { name: string; value: number; color: string }[] = dashboardStats?.moodPieData || [];
+  const hasMoodData = moodPieData.length > 0 && moodPieData.some(d => d.value > 0);
 
 
-  // Summary counts
-  const totalUsersCount = creators.length;
-  const activeUsersCount = creators.filter(c => c.status === 'active').length;
-  const totalReelsCount = reels.length;
+const totalUsersCount = dashboardStats?.totalUsers ?? creators.filter(c => c.status !== 'suspended').length;
+  const activeUsersCount = dashboardStats?.totalCreators ?? creators.filter((c) => c.status === 'active').length;
+  const totalReelsCount = dashboardStats?.totalReels ?? reels.length;
   const totalViewsCount = reels.reduce((acc, r) => acc + r.views, 0);
-  const totalCoinsDistributed = creators.reduce((acc, c) => acc + c.coinsEarned, 0);
 
   const formatNumber = (num: number) => {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+    if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
     return num.toString();
   };
 
-  return (
+const processingPercent = moodPieData.reduce((a: number, b: { value: number }) => a + b.value, 0);
+ const liveSecurityEvents: any[] = dashboardStats?.securityEvents || [];
+
+return (
     <div className="space-y-6">
-      {/* ⚡ Header Control Tabs */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-border pb-4 gap-4">
-        <div>
-          <h1 className="text-2xl font-black uppercase tracking-wider text-foreground">Platform Overview</h1>
-          <p className="text-muted-foreground text-[10px] uppercase font-mono mt-1 font-semibold">POPLI administrative command status board</p>
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  'w-10 h-10 rounded-xl flex items-center justify-center',
+                  confirmDialog === 'enable'
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400'
+                )}>
+                  <Shield className="w-5 h-5" />
+                </div>
+                <h3 className="text-[15px] font-semibold text-foreground">
+                  {confirmDialog === 'enable' ? 'Enable Bot Protection?' : 'Disable Bot Protection?'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[13px] text-muted-foreground leading-relaxed">
+              {confirmDialog === 'enable'
+                ? 'You are about to enable Platform Bot Protection Mode. This will place the platform into a high-security state and begin monitoring suspicious activity. This action will be logged.'
+                : 'You are about to disable Bot Protection. This will return the platform to normal operating mode. This action will be logged.'}
+            </p>
+            <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+              <p className="text-[12px] text-muted-foreground">This action is recorded in the Audit Log.</p>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                disabled={actionLoading}
+                className="flex-1 h-10 border border-border rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBotProtectionConfirm}
+                disabled={actionLoading}
+                className={cn(
+                  'flex-1 h-10 rounded-lg text-[13px] font-semibold text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2',
+                  confirmDialog === 'enable'
+                    ? 'bg-primary hover:bg-primary/90'
+                    : 'bg-red-500 hover:bg-red-600'
+                )}
+              >
+                {actionLoading && <Activity className="w-3.5 h-3.5 animate-spin" />}
+                {confirmDialog === 'enable' ? 'Enable Protection' : 'Disable Protection'}
+              </button>
+            </div>
+          </div>
         </div>
-        
-        <div className="flex bg-card border border-border p-1 rounded-xl self-stretch sm:self-auto shadow-sm">
-          {([
-            { id: 'overview', label: 'OPERATIONS OVERVIEW' },
-            { id: 'live', label: 'LIVE SIMULATION' },
-            { id: 'growth', label: 'GROWTH ANALYTICS' }
-          ] as const).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "px-4 py-1.5 text-[9px] font-bold tracking-wider transition-all rounded-lg uppercase font-mono",
-                activeTab === tab.id 
-                  ? "bg-primary text-white shadow-sm shadow-primary/20" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
+      )}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <h1 className="text-[26px] font-bold text-foreground tracking-tight">Platform Overview</h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            Centralized administrative monitoring for Popli Global Operations.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative flex items-center">
+            <Globe className="w-4 h-4 text-muted-foreground absolute left-3 pointer-events-none" />
+            <select
+              value={selectedCity}
+              onChange={(e) => handleCityChange(e.target.value)}
+              className="appearance-none h-9 pl-9 pr-8 rounded-lg border border-border bg-card text-[13px] font-medium text-foreground hover:bg-muted transition-colors cursor-pointer outline-none"
             >
-              {tab.label}
-            </button>
-          ))}
+              {CITIES.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
+          </div>
+<button
+            disabled={botProtection.loading}
+            onClick={() => setConfirmDialog(botProtection.enabled ? 'disable' : 'enable')}
+            className={cn(
+              'flex items-center gap-2 h-9 px-4 rounded-lg text-[13px] font-semibold transition-all disabled:opacity-50',
+              botProtection.enabled
+                ? 'bg-red-500 text-white hover:bg-red-600'
+                : 'bg-primary text-white hover:bg-primary/90'
+            )}
+          >
+            <Shield className="w-4 h-4" />
+            {botProtection.loading
+              ? 'Loading...'
+              : botProtection.enabled
+              ? 'Bot Protection Active'
+              : 'Enable Bot Protection'}
+          </button>
         </div>
       </div>
 
-      {activeTab === 'overview' && (
-        <>
-          {/* 📊 Metrics Widgets Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { title: 'Total Creators', value: formatNumber(totalUsersCount), desc: 'REGISTERED PROFILE INDEX', icon: UsersIcon, color: '#0ea5e9' },
-              { title: 'Active Creators', value: formatNumber(activeUsersCount), desc: 'CLEARANCE SECURED VIBES', icon: Activity, color: '#00D8F6' },
-              { title: 'Total Uploaded Reels', value: formatNumber(totalReelsCount), desc: 'CONTENT REPOSITORY BLOCK', icon: Video, color: '#FF7C00' },
-              { title: 'Cumulative Views', value: formatNumber(totalViewsCount), desc: 'WATCH LOOP VOLUMETRIC', icon: Eye, color: '#FF2A00' },
-             { title: 'Distributed Coins', value: formatNumber(dashboardStats?.distributedCoins || 0), desc: 'VIRTUAL COIN CIRCULATION', icon: Coins, color: '#0ea5e9' },
-      { title: 'Gift Revenue', value: '₹' + formatNumber((dashboardStats?.giftRevenue || 0) * 0.85), desc: 'COMMERCE INFLOW INR', icon: Gift, color: '#00D8F6' },
-              { title: 'Avg Watch Time', value: '43.2 Min', desc: 'SESSION DOPAMINE DEPTH', icon: Clock, color: '#FF7C00' },
-              { title: 'Virality Accel', value: '88%', desc: 'RECOMMENDER EXPONENTIAL', icon: TrendingUp, color: '#FF2A00' }
-            ].map((widget, i) => {
-              const Icon = widget.icon;
-              return (
-                <div key={i} className="bg-card border border-border p-5 rounded-2xl flex flex-col justify-between hover:-translate-y-1 hover:shadow-xl hover:border-primary/40 transition-all duration-300">
-                  <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none font-mono">{widget.title}</span>
-                    <div className="p-1.5 rounded-lg bg-muted flex items-center justify-center">
-                      <Icon className="w-4 h-4" style={{ color: widget.color }} />
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-3xl font-black tracking-tight" style={{ color: widget.color }}>{widget.value}</span>
-                    <p className="text-[8px] text-muted-foreground/80 font-bold uppercase tracking-widest mt-2 font-mono">{widget.desc}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          title="Total Creators"
+          value={formatNumber(totalUsersCount)}
+          desc="Registered Profile Index"
+          icon={UsersIcon}
+          iconBg="bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400"
+        />
+        <KPICard
+          title="Active Creators"
+          value={formatNumber(activeUsersCount)}
+          desc="Clearance Secured Vibes"
+          icon={Activity}
+          iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+        />
+        <KPICard
+          title="Total Uploaded Reels"
+          value={formatNumber(totalReelsCount)}
+          desc="Content Repository Block"
+          icon={Video}
+          iconBg="bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400"
+        />
+        <KPICard
+          title="Cumulative Views"
+          value={formatNumber(totalViewsCount)}
+          desc="Watch Loop Volumetric"
+          icon={Eye}
+          iconBg="bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400"
+        />
+        <KPICard
+          title="Distributed Coins"
+          value={formatNumber(dashboardStats?.distributedCoins || 0)}
+          desc="Virtual Coin Circulation"
+          icon={Coins}
+          iconBg="bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400"
+        />
+<KPICard
+          title="Gift Revenue"
+          value={dashboardStats?.giftRevenue != null ? '₹' + formatNumber(dashboardStats.giftRevenue) : '—'}
+          desc="Commerce Inflow INR"
+          icon={Gift}
+          iconBg="bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-400"
+        />
+        <KPICard
+          title="Avg Watch Time"
+          value={dashboardStats?.avgWatchTime != null ? `${dashboardStats.avgWatchTime} Min` : '—'}
+          desc="Session Dopamine Depth"
+          icon={Clock}
+          iconBg="bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+        />
+        <KPICard
+          title="Virality Accel"
+          value={dashboardStats?.viralityAccel != null ? `${dashboardStats.viralityAccel}%` : '—'}
+          desc="Recommender Exponential"
+          icon={TrendingUp}
+          iconBg="bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"
+        />
+      </div>
 
-          {/* 📈 Operations Center Panels */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Primary Graph: User Growth */}
-            <div className="bg-card border border-border p-5 rounded-2xl lg:col-span-2 space-y-4 shadow-sm">
-              <div className="flex justify-between items-center select-none">
-                <span className="text-xs font-extrabold uppercase tracking-widest font-mono text-foreground">Platform Growth Vector</span>
-                <span className="text-[8px] bg-primary/10 border border-primary/20 text-primary font-bold uppercase px-2 py-0.5 rounded-md flex items-center gap-1 font-mono">
-                  <Zap className="w-3 h-3 text-primary" /> UPDATE SECURED
-                </span>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={userGrowthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.15}/>
-                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
-                    <XAxis dataKey="name" stroke="var(--color-muted-foreground)" fontSize={9} fontStyle="italic" />
-                    <YAxis stroke="var(--color-muted-foreground)" fontSize={9} />
-                    <Tooltip contentStyle={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', fontSize: 10, fontFamily: 'monospace', borderRadius: 8 }} />
-                    <Area type="monotone" dataKey="Users" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorUsers)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+  <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-[15px] font-semibold text-foreground">Platform Growth Vector</h2>
+              <p className="text-[12px] text-muted-foreground mt-0.5">Historical trajectory of creator adoption</p>
             </div>
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              {(['Monthly', 'Weekly'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setGrowthTab(tab)}
+                  className={cn(
+                    'h-7 px-3 rounded-md text-[12px] font-medium transition-all',
+                    growthTab === tab
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+          <GrowthChart data={userGrowthData} tab={growthTab} />
+        </div>
 
-            {/* Platform Mood Retention breakdown */}
-            <div className="bg-card border border-border p-5 rounded-2xl flex flex-col justify-between shadow-sm">
-              <span className="text-xs font-extrabold uppercase tracking-widest block mb-4 font-mono text-foreground">PSYCHOLOGY EMOTION BREAKDOWN</span>
-              <div className="h-44 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
+    <div className="bg-card border border-border rounded-xl p-5 flex flex-col">
+          <div>
+            <h2 className="text-[15px] font-semibold text-foreground">Psychology Emotion Breakdown</h2>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Sentiment analysis of user interactions</p>
+          </div>
+          {hasMoodData ? (
+            <>
+              <div className="flex-1 flex items-center justify-center relative my-2">
+                <ResponsiveContainer width="100%" height={160}>
                   <PieChart>
                     <Pie
                       data={moodPieData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={48}
-                      outerRadius={64}
-                      paddingAngle={3}
+                      innerRadius={52}
+                      outerRadius={70}
+                      paddingAngle={2}
                       dataKey="value"
+                      startAngle={90}
+                      endAngle={-270}
                     >
                       {moodPieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell key={index} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', fontSize: 10, fontFamily: 'monospace', borderRadius: 8 }} />
                   </PieChart>
                 </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-[22px] font-bold text-foreground">{processingPercent}%</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Processing</span>
+                </div>
               </div>
-              <div className="space-y-1.5 text-[9px] uppercase font-bold text-muted-foreground mt-2 font-mono">
+              <div className="space-y-2 mt-2">
                 {moodPieData.map((mood, idx) => (
-                  <div key={idx} className="flex justify-between items-center">
-                    <span className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-md" style={{ background: mood.color }} />
-                      {mood.name}
-                    </span>
-                    <span className="text-foreground font-mono">{mood.value}%</span>
+                  <div key={idx} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: mood.color }} />
+                      <span className="text-[12px] text-muted-foreground">{mood.name}</span>
+                    </div>
+                    <span className="text-[12px] font-semibold text-foreground">{mood.value}%</span>
                   </div>
                 ))}
               </div>
-            </div>
-            
-          </div>
-        </>
-      )}
-
-      {activeTab === 'live' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Live Action Tracker Feed */}
-          <div className="bg-card border border-border p-5 rounded-2xl lg:col-span-2 flex flex-col h-[400px] shadow-sm">
-            <div className="flex justify-between items-center border-b border-border pb-3 mb-3 select-none">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-ping" />
-                <span className="text-xs font-extrabold uppercase tracking-widest font-mono text-foreground">LIVE EVENT DECODER</span>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center py-8">
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Activity className="w-5 h-5 text-muted-foreground" />
               </div>
-              <span className="text-[8px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-bold px-2 py-0.5 rounded-md uppercase font-mono">SYSTEM PING: ACTIVE</span>
+              <p className="text-[13px] font-semibold text-foreground">No sentiment data yet</p>
+              <p className="text-[12px] text-muted-foreground">Emotion analysis will appear once user interaction data is available.</p>
             </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2.5 custom-scrollbar text-[10px] font-mono">
-              {liveEvents.map((evt) => (
-                <div key={evt.id} className="p-3 bg-muted/40 border border-border rounded-xl flex justify-between items-center hover:border-primary/30 transition-all hover:bg-muted/70">
-                  <div className="flex items-center gap-2.5">
-                    <span className={cn(
-                      "w-2 h-2 rounded-full shrink-0",
-                      evt.type === 'gift' ? 'bg-[#0ea5e9]' : (evt.type === 'upload' ? 'bg-[#ec4899]' : (evt.type === 'viral' ? 'bg-orange-500' : 'bg-green-500'))
-                    )} />
-                    <span className="text-foreground uppercase leading-normal tracking-wide">{evt.text}</span>
-                  </div>
-                  <span className="text-muted-foreground text-[8px] whitespace-nowrap ml-4">{evt.time}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Hyperlocal Activity Map widget */}
-          <div className="bg-card border border-border p-5 rounded-2xl flex flex-col justify-between h-[400px] shadow-sm">
-            <span className="text-xs font-extrabold uppercase tracking-widest block mb-4 font-mono text-foreground">HYPERLOCAL INJECTOR VOLUME</span>
-            <div className="space-y-3 flex-1 overflow-y-auto pr-1 text-[10px] uppercase font-bold text-muted-foreground font-mono">
-              {hyperlocalData.map((item: any, idx: number) => (
-                <div key={idx} className="p-3 bg-muted/40 border border-border rounded-xl flex justify-between items-center hover:border-primary/20 transition-colors">
-                  <div>
-                    <span className="text-foreground tracking-wide block">{item.city}</span>
-                    <span className="text-muted-foreground text-[8px] font-normal block mt-1">{item.uploads}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-primary tracking-wide block">{item.views}</span>
-                    <div className="flex items-center gap-1.5 justify-end mt-1">
-                      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0 animate-pulse", item.heat)} />
-                      <span className="text-[7px] text-muted-foreground">HOTSPOT</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {activeTab === 'growth' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Bar Chart - Category view depth */}
-          <div className="bg-card border border-border p-5 rounded-2xl space-y-4 shadow-sm">
-            <span className="text-xs font-extrabold uppercase tracking-widest block font-mono text-foreground">CATEGORY UPLOADS VS VIEWS</span>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={engagementData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} />
-                  <XAxis dataKey="name" stroke="var(--color-muted-foreground)" fontSize={9} fontStyle="italic" />
-                  <YAxis stroke="var(--color-muted-foreground)" fontSize={9} />
-                  <Tooltip contentStyle={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', fontSize: 10, fontFamily: 'monospace', borderRadius: 8 }} />
-                  <Bar dataKey="uploads" fill="#0ea5e9" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="views" fill="#ec4899" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Platform Performance metrics */}
-          <div className="bg-card border border-border p-5 rounded-2xl space-y-4 shadow-sm">
-            <span className="text-xs font-extrabold uppercase tracking-widest block font-mono text-foreground">Platform Heat indicators</span>
-            <div className="space-y-4 pt-2">
-              {heatIndicators.map((item: any, idx: number) => (
-                <div key={idx} className="space-y-1.5 uppercase font-bold text-[10px] font-mono">
-                  <div className="flex justify-between items-center text-muted-foreground">
-                    <span>{item.label}</span>
-                    <span className="text-foreground font-mono">{item.percent}</span>
-                  </div>
-                  <div className="h-2 bg-muted border border-border rounded-lg overflow-hidden">
-                    <div className={cn("h-full rounded-lg", item.color)} style={{ width: item.percent }} />
-                  </div>
-                  <span className="text-muted-foreground/60 text-[8px] block font-normal normal-case">{item.desc}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+   <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-[15px] font-semibold text-foreground">Security Event Log</h2>
+      {botProtection.enabled && (
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 px-2.5 py-1 rounded-md flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              Bot Protection Active
+            </span>
+          )}
         </div>
-      )}
+        {liveSecurityEvents.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  {['Timestamp', 'Event Type', 'Region', 'Status', 'Action'].map((h) => (
+                    <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {liveSecurityEvents.map((evt: any, idx: number) => (
+                  <tr key={evt.id || idx} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="px-5 py-3.5 text-[12px] font-mono text-foreground">
+                      {evt.time || (evt.createdAt ? new Date(evt.createdAt).toLocaleTimeString() : '—')}
+                    </td>
+                    <td className="px-5 py-3.5 text-[12px] font-medium text-foreground">{evt.type || evt.eventType || '—'}</td>
+                    <td className="px-5 py-3.5 text-[12px] text-muted-foreground">{evt.region || '—'}</td>
+                    <td className="px-5 py-3.5">
+                      <span className={cn(
+                        'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wide',
+                        ['STABLE', 'stable'].includes(evt.status)
+                          ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                          : ['RESOLVED', 'resolved'].includes(evt.status)
+                          ? 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400'
+                          : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                      )}>
+                        {evt.status || '—'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <button className="text-[12px] font-semibold text-primary hover:underline">Details</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 text-center py-10">
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <p className="text-[13px] font-semibold text-foreground">No security events</p>
+         <p className="text-[12px] text-muted-foreground">Security events will appear here once bot protection actions are performed.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

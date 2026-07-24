@@ -4,16 +4,17 @@ import { AuthState, User } from '../../types';interface ExtendedAuthState extend
   currentBranchId: string; // 'all' or specific
 }
 
+const token = localStorage.getItem('adminToken');
+
 const initialState: ExtendedAuthState = {
   user: null,
-  token: null,
-  isAuthenticated: false,
+  token: token,
+  isAuthenticated: !!token,
   isLoading: false,
   error: null,
   currentCityId: 'all',
   currentBranchId: 'all'
 };
-
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -33,12 +34,13 @@ const authSlice = createSlice({
       state.isLoading = false;
       state.error = action.payload;
     },
-    logout: (state) => {
+logout: (state) => {
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
       state.isLoading = false;
       state.error = null;
+      localStorage.removeItem('adminToken');
     },
     switchContext: (state, action: PayloadAction<{ cityId?: string; branchId?: string }>) => {
       if (action.payload.cityId !== undefined) {
@@ -50,13 +52,9 @@ const authSlice = createSlice({
         state.currentBranchId = action.payload.branchId;
       }
     },
-    switchRole: (state, action: PayloadAction<import('../../types').UserRole>) => {
-      if (state.user) {
-        state.user.role = action.payload;
-      }
-    }
+  
   }
 });
 
-export const { loginStart, loginSuccess, loginFailure, logout, switchContext, switchRole } = authSlice.actions;
+export const { loginStart, loginSuccess, loginFailure, logout, switchContext } = authSlice.actions;
 export default authSlice.reducer;

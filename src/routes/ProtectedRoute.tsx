@@ -5,20 +5,25 @@ import { UserRole } from '@/types';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: UserRole[];
+  requiredPermission?: string;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  requiredPermission,
+}) => {
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
   const location = useLocation();
 
   if (!isAuthenticated || !user) {
-    // Redirect guest users to login and save location
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // User's role is unauthorized for this specific module
+  if (user.role === 'super_admin') {
+    return <>{children}</>;
+  }
+
+  if (requiredPermission && !user.permissions?.[requiredPermission]) {
     return <Navigate to="/unauthorized" replace />;
   }
 

@@ -12,13 +12,24 @@ import { CampaignsPage } from '@/pages/Campaigns';
 import { ModerationPage } from '@/pages/Moderation';
 import { MessagingPage } from '@/pages/Messaging';
 import { AnalyticsPage } from '@/pages/Analytics';
-import { NearbyPage } from '@/pages/Nearby';
-import { StaffPage } from '@/pages/Staff';
+
+
 import { SupportPage } from '@/pages/Support';
 import { SettingsPage } from '@/pages/Settings';
 import { ChallengesPage } from '@/pages/Challenges';
 import { CreateChallengePage } from '@/pages/CreateChallenge';
 import { ChallengeDetailPage } from '@/pages/ChallengeDetail';
+import {
+  GeneralSettingsPage,
+  CreatorEarningsPage,
+  GiftEconomyPage,
+  CoinEconomyPage,
+  ReferralRewardsPage,
+  WithdrawalRulesPage,
+  PlatformFeeTaxPage,
+} from '@/pages/FinancialSettings';
+import { CoinPackagesPage } from '@/pages/CoinPackagesPage';
+import { AdminPartnersPage } from '@/pages/AdminPartners';
 
 export const router = createBrowserRouter([
   {
@@ -39,12 +50,16 @@ export const router = createBrowserRouter([
       },
       {
         path: 'dashboard',
-        element: <DashboardPage />,
+        element: (
+          <ProtectedRoute requiredPermission="view_dashboard">
+            <DashboardPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'users',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'moderator', 'support_admin']}>
+          <ProtectedRoute requiredPermission="view_users">
             <UsersPage />
           </ProtectedRoute>
         ),
@@ -52,7 +67,7 @@ export const router = createBrowserRouter([
       {
         path: 'reels',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'moderator', 'marketing_admin']}>
+          <ProtectedRoute requiredPermission="view_reels">
             <ReelsPage />
           </ProtectedRoute>
         ),
@@ -60,7 +75,7 @@ export const router = createBrowserRouter([
       {
         path: 'feed-control',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'marketing_admin']}>
+          <ProtectedRoute requiredPermission="view_feed_control">
             <FeedControlPage />
           </ProtectedRoute>
         ),
@@ -68,7 +83,7 @@ export const router = createBrowserRouter([
       {
         path: 'monetization',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'finance_admin']}>
+          <ProtectedRoute requiredPermission="view_monetization">
             <MonetizationPage />
           </ProtectedRoute>
         ),
@@ -76,7 +91,7 @@ export const router = createBrowserRouter([
       {
         path: 'fraud',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'moderator']}>
+          <ProtectedRoute requiredPermission="view_fraud">
             <FraudPage />
           </ProtectedRoute>
         ),
@@ -84,7 +99,7 @@ export const router = createBrowserRouter([
       {
         path: 'campaigns',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'marketing_admin']}>
+          <ProtectedRoute requiredPermission="view_campaigns">
             <CampaignsPage />
           </ProtectedRoute>
         ),
@@ -92,7 +107,7 @@ export const router = createBrowserRouter([
       {
         path: 'moderation',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'moderator']}>
+          <ProtectedRoute requiredPermission="view_moderation">
             <ModerationPage />
           </ProtectedRoute>
         ),
@@ -100,7 +115,7 @@ export const router = createBrowserRouter([
       {
         path: 'messaging',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'moderator']}>
+          <ProtectedRoute requiredPermission="view_support">
             <MessagingPage />
           </ProtectedRoute>
         ),
@@ -108,38 +123,35 @@ export const router = createBrowserRouter([
       {
         path: 'analytics',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'finance_admin', 'marketing_admin']}>
+          <ProtectedRoute requiredPermission="view_analytics">
             <AnalyticsPage />
           </ProtectedRoute>
         ),
       },
-      {
-        path: 'nearby',
-        element: <NearbyPage />,
-      },
+     
       {
         path: 'challenges',
         children: [
           {
             index: true,
             element: (
-              <ProtectedRoute allowedRoles={['super_admin', 'marketing_admin']}>
+              <ProtectedRoute requiredPermission="view_challenges">
                 <ChallengesPage />
               </ProtectedRoute>
             ),
           },
-        {
+          {
             path: 'create',
             element: (
-              <ProtectedRoute allowedRoles={['super_admin', 'marketing_admin']}>
+              <ProtectedRoute requiredPermission="create_challenges">
                 <CreateChallengePage />
               </ProtectedRoute>
             ),
           },
-       {
+          {
             path: ':id',
             element: (
-              <ProtectedRoute allowedRoles={['super_admin', 'marketing_admin']}>
+              <ProtectedRoute requiredPermission="view_challenges">
                 <ChallengeDetailPage />
               </ProtectedRoute>
             ),
@@ -147,33 +159,103 @@ export const router = createBrowserRouter([
           {
             path: ':id/edit',
             element: (
-              <ProtectedRoute allowedRoles={['super_admin', 'marketing_admin']}>
+              <ProtectedRoute requiredPermission="edit_challenges">
                 <div className="p-6">Edit Challenge Page (Coming Soon)</div>
               </ProtectedRoute>
             ),
-          }
-        ]
+          },
+        ],
       },
+   
       {
-        path: 'staff',
+        path: 'admin-partners',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin']}>
-            <StaffPage />
+          <ProtectedRoute requiredPermission="view_partners">
+            <AdminPartnersPage />
           </ProtectedRoute>
         ),
       },
       {
         path: 'support',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin', 'support_admin']}>
+          <ProtectedRoute requiredPermission="view_support">
             <SupportPage />
           </ProtectedRoute>
         ),
       },
       {
+        path: 'financial',
+        children: [
+          {
+            path: 'general',
+            element: (
+              <ProtectedRoute requiredPermission="view_financial_settings">
+                <GeneralSettingsPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'earnings',
+            element: (
+              <ProtectedRoute requiredPermission="view_financial_settings">
+                <CreatorEarningsPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'gifts',
+            element: (
+              <ProtectedRoute requiredPermission="manage_gift_revenue">
+                <GiftEconomyPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'coins',
+            element: (
+              <ProtectedRoute requiredPermission="manage_coins">
+                <CoinEconomyPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'referrals',
+            element: (
+              <ProtectedRoute requiredPermission="manage_revenue_settings">
+                <ReferralRewardsPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'withdrawals',
+            element: (
+              <ProtectedRoute requiredPermission="manage_withdrawal_config">
+                <WithdrawalRulesPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'fees',
+            element: (
+              <ProtectedRoute requiredPermission="manage_taxes_fees">
+                <PlatformFeeTaxPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'coin-packages',
+            element: (
+              <ProtectedRoute requiredPermission="manage_coin_distribution">
+                <CoinPackagesPage />
+              </ProtectedRoute>
+            ),
+          },
+        ],
+      },
+      {
         path: 'settings',
         element: (
-          <ProtectedRoute allowedRoles={['super_admin']}>
+          <ProtectedRoute requiredPermission="view_settings">
             <SettingsPage />
           </ProtectedRoute>
         ),
@@ -185,8 +267,8 @@ export const router = createBrowserRouter([
             <h2 className="text-xl font-bold text-red-600 mb-2 uppercase tracking-wide">Access Revoked</h2>
             <p className="text-slate-500 text-xs uppercase leading-normal">Your current operator clearance role lacks permissions to audit this module dataset.</p>
           </div>
-        )
-      }
+        ),
+      },
     ],
   },
   {

@@ -1,99 +1,69 @@
 import React from 'react';
 import { usePlatformStore } from '../store/usePlatformStore';
-import { MapPin, Check, Wifi, AlertTriangle, ShieldCheck } from 'lucide-react';
-
-const CITIES = [
-  { id: 'all', name: 'All India' },
-  { id: 'mumbai', name: 'Mumbai' },
-  { id: 'delhi', name: 'Delhi' },
-  { id: 'bengaluru', name: 'Bengaluru' },
-  { id: 'lucknow', name: 'Lucknow' },
-  { id: 'jaipur', name: 'Jaipur' },
-  { id: 'indore', name: 'Indore' },
-  { id: 'madurai', name: 'Madurai' }
-];
+import { Wifi, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 export const GlobalContextBar: React.FC = () => {
-  const { botAttackActive, creators, reels } = usePlatformStore();
+ const { botProtectionEnabled, creators, reels } = usePlatformStore();
+const [ping, setPing] = React.useState<number | null>(null);
 
-  // We will keep a local state or ref to allow selecting active city context globally
-  // and make sure we can trigger simple updates. For simplicity, we can read/write city filters
-  // or just use it as a gorgeous context indicator. Let's make it highly interactive by saving 
-  // the selected city into a window global or just styling it.
-  const [selectedCity, setSelectedCity] = React.useState('all');
+  React.useEffect(() => {
+    const measure = async () => {
+      const start = performance.now();
+      try {
+        await fetch('/api/health', { method: 'HEAD', cache: 'no-store' }).catch(() =>
+          fetch(import.meta.env.VITE_API_URL || '', { method: 'HEAD', cache: 'no-store' })
+        );
+      } catch {
+      } finally {
+        const ms = Math.round(performance.now() - start);
+        setPing(ms);
+      }
+    };
+    measure();
+    const interval = setInterval(measure, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedCity(e.target.value);
-    // Expose as window global or standard context trigger so pages can read it!
-    (window as any).__popli_active_city_filter = e.target.value;
-    // Dispatch a dummy event so active listeners update!
-    window.dispatchEvent(new CustomEvent('popli_city_changed', { detail: e.target.value }));
-  };
-
-  const activeCityName = CITIES.find(c => c.id === selectedCity)?.name || 'All India';
-
-  // Stats summaries
-  const totalUsers = creators.length;
+const totalUsers = creators.filter((c) => c.status !== 'suspended').length;
   const totalReels = reels.length;
 
   return (
-    <div className="bg-card border-t border-b border-border text-muted-foreground text-[10px] px-6 py-2 flex flex-col md:flex-row items-start md:items-center gap-4 select-none font-mono">
-      <div className="flex items-center gap-1.5 text-primary font-black tracking-widest uppercase shrink-0">
-        <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-        POPLI OPERATIONS SCOPE:
+<div className="h-10 bg-card border-b border-border flex items-center px-4 md:px-6 gap-4 flex-shrink-0 select-none overflow-x-auto">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="hidden sm:flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground">Creators:</span>
+            <span className="text-[11px] font-semibold text-foreground">{totalUsers}</span>
+          </div>
+          <div className="w-px h-3 bg-border" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground">Reels Stream:</span>
+            <span className="text-[11px] font-semibold text-foreground">{totalReels} Active</span>
+          </div>
+          <div className="w-px h-3 bg-border" />
+          <div className="flex items-center gap-1.5">
+            <Wifi className="w-3 h-3 text-emerald-500" />
+            <span className="text-[11px] text-muted-foreground">Ping:</span>
+       <span className="text-[11px] font-semibold text-foreground font-mono">
+              {ping != null ? `${ping}ms` : '—'}
+            </span>
+          </div>
+</div>
       </div>
 
-      <div className="flex flex-wrap gap-4 flex-1 items-center w-full">
-        {/* City/Geo Context Selector */}
-        <div className="flex items-center gap-1.5 bg-muted border border-border px-2 py-0.5 rounded-[2px] hover:border-primary/40 transition-colors">
-          <MapPin className="h-3 w-3 text-primary" />
-          <select 
-            value={selectedCity}
-            onChange={handleCityChange}
-            className="bg-transparent border-none outline-none text-foreground font-bold text-[10px] pr-1 cursor-pointer font-mono uppercase"
-          >
-            {CITIES.map(c => (
-              <option key={c.id} value={c.id} className="text-foreground bg-card font-bold">{c.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Live System Performance Statistics */}
-        <div className="hidden sm:flex items-center gap-4 text-[9px] font-semibold text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <span>CREATORS:</span>
-            <span className="text-foreground">{totalUsers}</span>
+      <div className="flex items-center gap-2 flex-shrink-0">
+     {botProtectionEnabled ? (
+          <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400 text-[11px] font-semibold px-2.5 h-7 rounded-lg animate-pulse">
+            <AlertTriangle className="w-3 h-3" />
+            <span>Threat Index: High</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span>REELS STREAM:</span>
-            <span className="text-foreground">{totalReels} ACTIVE</span>
+        ) : (
+          <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-[11px] font-semibold px-2.5 h-7 rounded-lg">
+            <ShieldCheck className="w-3 h-3" />
+            <span className="hidden sm:inline">Shield Status: Secure (Live Feed Active)</span>
+            <span className="sm:hidden">Secure</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Wifi className="h-2.5 w-2.5 text-primary" />
-            <span>PING:</span>
-            <span className="text-foreground font-mono">34ms (STABLE)</span>
-          </div>
-        </div>
-
-        {/* Alert status indicators based on bot simulation */}
-        <div className="md:ml-auto flex items-center gap-2">
-          {botAttackActive ? (
-            <div className="flex items-center gap-1.5 bg-destructive/10 border border-destructive/50 text-destructive font-bold uppercase px-2 py-0.5 rounded-[2px] animate-pulse">
-              <AlertTriangle className="h-3 w-3" /> 
-              THREAT INDEX: HIGH (BOT INTRUSION)
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 bg-success/10 border border-success/30 text-success font-bold uppercase px-2 py-0.5 rounded-[2px]">
-              <ShieldCheck className="h-3 w-3 text-success" />
-              SHIELD STATUS: SECURE (LIVE FEED ACTIVE)
-            </div>
-          )}
-          
-          <div className="hidden md:flex items-center gap-1.5 bg-muted border border-border text-muted-foreground font-bold uppercase px-2 py-0.5 rounded-[2px]">
-            <Check className="h-2.5 w-2.5 text-primary" /> 
-            <span>{activeCityName}</span>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

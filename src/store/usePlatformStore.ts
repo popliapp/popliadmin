@@ -117,6 +117,54 @@ export interface Gift {
   animationType: 'fade' | 'bounce' | 'zoom' | '3d';
 }
 
+export interface FeedBoost {
+  id: string;
+  type: string;
+  target: string;
+  intensity: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface FeedMetrics {
+  totalReels: number;
+  totalViews: number;
+  totalValidViews: number;
+  pendingEarningsViews: number;
+  activeUsers: number;
+  pendingReports: number;
+}
+
+export interface FraudStats {
+  shadowBannedCount: number;
+  blockedCount: number;
+  revokedSessionsCount: number;
+  suspiciousUsers: Array<{
+    id: string;
+    name: string;
+    username: string;
+    avatar: string | null;
+    city: string | null;
+    createdAt: string;
+    earningsFrozen: boolean;
+    flagType: 'shadow_banned' | 'blocked';
+  }>;
+  suspiciousIps: Array<{
+    ipAddress: string;
+    sessionCount: number;
+    riskLevel: 'medium' | 'high' | 'critical';
+  }>;
+  suspiciousDevices: Array<{
+    deviceInfo: string;
+    sessionCount: number;
+    riskLevel: 'medium' | 'high' | 'critical';
+  }>;
+  highVolumeViewers: Array<{
+    deviceId: string;
+    viewCount: number;
+    riskLevel: 'medium' | 'high' | 'critical';
+  }>;
+}
 interface PlatformState {
   creators: Creator[];
   reels: Reel[];
@@ -126,6 +174,9 @@ interface PlatformState {
   tickets: SupportTicket[];
   gifts: Gift[];
   dashboardStats: any;
+feedBoosts: FeedBoost[];
+  feedMetrics: FeedMetrics | null;
+  fraudStats: FraudStats | null;
   
   // Platform Controls
   recommendationWeights: {
@@ -135,22 +186,23 @@ interface PlatformState {
     commentWeight: number;
     moodWeight: number;
   };
-  coinRateSettings: {
-    purchasePricePerCoin: number; // INR
-    withdrawalRedeemRate: number; // INR per coin
-    minimumWithdrawalCoins: number;
-    dailyLimitCoins: number;
-  };
-  botAttackActive: boolean;
-  botSimulationInterval: number; // speed multiplier
-  
-  // Actions - User Management
+
+botProtectionEnabled: boolean;
+  botProtectionEnabledAt: string | null;
+
+fetchFeedBoosts: () => Promise<void>;
+  createFeedBoost: (data: { type: string; target: string; intensity: number }) => Promise<void>;
+  deleteFeedBoost: (boostId: string) => Promise<void>;
+  fetchFeedMetrics: () => Promise<void>;
+  fetchFraudStats: () => Promise<void>;
+
   banUser: (userId: string) => void;
   unbanUser: (userId: string) => void;
   verifyUser: (userId: string) => void;
   removeVerification: (userId: string) => void;
   shadowBanUser: (userId: string) => void;
-  freezeEarnings: (userId: string) => void;
+freezeEarnings: (userId: string) => void;
+  toggleMonetization: (userId: string) => Promise<void>;
   
   // Actions - Content Management
   removeReel: (reelId: string) => void;
@@ -162,7 +214,7 @@ interface PlatformState {
   // Actions - Payouts & Coins
   approveWithdrawal: (txId: string) => void;
   rejectWithdrawal: (txId: string) => void;
-  updateCoinRates: (rates: Partial<PlatformState['coinRateSettings']>) => void;
+
   addGiftItem: (gift: Gift) => void;
   deleteGiftItem: (giftId: string) => void;
   
@@ -174,9 +226,8 @@ interface PlatformState {
   // Actions - Control Panel Sliders & Simulation
   setWeights: (weights: Partial<PlatformState['recommendationWeights']>) => void;
   saveWeights: () => Promise<void>;
-  toggleBotAttack: () => void;
-  simulateLiveTicks: () => void;
-  resetPlatformStore: () => void;
+ simulateLiveTicks: () => void;
+ resetPlatformStore: () => void;
 }
 
 import { adminService } from '../services/adminService';
@@ -196,6 +247,9 @@ const DEFAULT_STATE = () => ({
   tickets: [],
   gifts: initialGifts,
   dashboardStats: null,
+feedBoosts: [],
+  feedMetrics: null,
+  fraudStats: null,
   recommendationWeights: {
     watchTimeWeight: 45,
     shareWeight: 25,
@@ -203,14 +257,9 @@ const DEFAULT_STATE = () => ({
     commentWeight: 10,
     moodWeight: 5
   },
-  coinRateSettings: {
-    purchasePricePerCoin: 1.25,
-    withdrawalRedeemRate: 0.85,
-    minimumWithdrawalCoins: 1000,
-    dailyLimitCoins: 50000
-  },
-  botAttackActive: false,
-  botSimulationInterval: 1000
+
+ botProtectionEnabled: false,
+  botProtectionEnabledAt: null,
 });
 
 export const usePlatformStore = create<PlatformState & { fetchAllData: () => Promise<void> }>((set) => ({
@@ -218,7 +267,7 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
 
   fetchAllData: async () => {
     try {
-    const [users, reels, txs, reports, tickets, fetchedGifts, withdrawals, dashboardStats, configWeights, allConfigs] = await Promise.all([
+const [users, reels, txs, reports, tickets, fetchedGifts, withdrawals, dashboardStats, configWeights] = await Promise.all([
         adminService.getUsers().catch(() => []),
         adminService.getReels().catch(() => []),
         adminService.getTransactions().catch(() => []),
@@ -227,35 +276,34 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
         adminService.getGifts().catch(() => []),
         adminService.getWithdrawals().catch(() => []),
         adminService.getDashboardStats().catch(() => null),
-        adminService.getFeedConfig().catch(() => null),
-        adminService.getConfigs().catch(() => ({})),
+        adminService.getConfigs().catch(() => null),
       ]);
 
-      const mappedCreators = users.map((u: any) => ({
-        id: u.id,
-        name: u.name || 'Unknown',
-        username: u.username || 'unknown',
-        avatar: u.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${u.username}`,
-       city: u.city || '',
-        state: u.state || '',
-        followers: u.followersCount || 0,
-        following: u.followingCount || 0,
-        totalLikes: u.totalLikesReceived || 0,
-        totalViews: u.reels?.reduce((sum: number, r: any) => sum + (r.viewsCount || 0), 0) || 0,
-        coinsEarned: 0,
-        videoCount: u._count?.reels || 0,
-        status: u.isBlocked ? 'suspended' : 'active',
-        isVerified: u.isVerified || false,
-        isMonetized: true,
-        earningsFrozen: false,
-        registrationDate: u.createdAt,
-        lastActive: u.updatedAt
-      }));
+const mappedCreators = users.map((u: any) => ({
+  id: u.id,
+  name: u.name || 'Unknown',
+  username: u.username || 'unknown',
+  avatar: u.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${u.username}`,
+  city: u.city || '',
+  state: u.state || '',
+  followers: u.followersCount || 0,
+  following: u.followingCount || 0,
+  totalLikes: u.totalLikesReceived || 0,
+  totalViews: u.reels?.reduce((sum: number, r: any) => sum + (r.viewsCount || 0), 0) || 0,
+  coinsEarned: u.wallet?.totalEarnings || 0,
+  videoCount: u._count?.reels || 0,
+  status: u.isShadowBanned ? 'shadow_banned' : u.isBlocked ? 'suspended' : 'active',
+  isVerified: u.isVerified || false,
+  isMonetized: u.isMonetized ?? true,
+  earningsFrozen: u.earningsFrozen ?? false,
+  registrationDate: u.createdAt,
+  lastActive: u.updatedAt
+}));
 
-      const mappedReels = reels.map((r: any) => ({
+const mappedReels = reels.map((r: any) => ({
         id: r.id,
         title: r.description || 'No Title',
-        duration: 15,
+        duration: r.durationSeconds || 0,
         creatorId: r.creatorId,
         creatorName: r.creator?.name || 'Unknown',
         creatorUsername: r.creator?.username || 'unknown',
@@ -265,24 +313,25 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
         commentsCount: r.commentsCount || 0,
         city: r.city || 'Unknown',
         category: r.category || 'vlog',
-        isTrending: r.viewsCount > 1000 || r.likesCount > 100,
+        isTrending: r.isTrending ?? false,
         isHidden: r.privacy === 'Private',
-        copyrightFlag: false,
+        copyrightFlag: r.copyrightFlag ?? false,
         reported: r.reports && r.reports.length > 0,
         commentsDisabled: !r.allowComments,
-        ageRestricted: false,
+        ageRestricted: r.ageRestricted ?? false,
         uploadDate: r.createdAt,
-        videoUrl: r.mediaUrl || "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-holding-a-camera-40742-large.mp4",
+        videoUrl: r.mediaUrl || '',
         pendingEarningsViews: r.pendingEarningsViews || 0,
-        challengeApprovalStatus: r.challengeApprovalStatus || 'PENDING'
+        challengeApprovalStatus: r.challengeApprovalStatus || 'PENDING',
+        musicName: r.musicName || '',
+        taggedUsers: r.taggedUsers || [],
       }));
-
     const mappedTxs = txs.map((t: any) => ({
         id: t.id,
         creatorName: t.wallet?.user?.name || 'Unknown',
         creatorUsername: t.wallet?.user?.username || 'unknown',
-        amount: t.currency === 'INR' ? Math.round(t.amount / 0.85) : t.amount,
-        rupees: t.currency === 'INR' ? t.amount : t.amount * 0.85,
+      amount: t.amount,
+        rupees: t.currency === 'INR' ? t.amount : 0,
         type: t.type === 'WITHDRAWAL' ? 'withdrawal' : 'purchase',
         status: t.status.toLowerCase(),
         date: t.createdAt,
@@ -293,12 +342,12 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
         id: w.id,
         creatorName: w.wallet?.user?.name || 'Unknown',
         creatorUsername: w.wallet?.user?.username || 'unknown',
-        amount: Math.round(w.amount / 0.85),
+      amount: w.amount,
         rupees: w.amount,
         type: 'withdrawal',
         status: w.status.toLowerCase(),
         date: w.createdAt,
-        method: 'UPI'
+      method: w.wallet?.user?.kycRecord?.upiId || '—'
       }));
 
       const mappedReports = reports.map((r: any) => ({
@@ -309,7 +358,13 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
         targetCreatorName: r.reel?.creator?.username || 'Unknown Creator',
         reportReason: r.reason,
         reporterName: r.reporter?.name || 'Unknown',
-        severity: 'medium',
+ severity: (() => {
+          const reason = (r.reason || '').toLowerCase();
+          if (reason.includes('nudity') || reason.includes('explicit') || reason.includes('csam')) return 'critical';
+          if (reason.includes('violence') || reason.includes('hate') || reason.includes('abuse')) return 'high';
+          if (reason.includes('spam') || reason.includes('misleading') || reason.includes('copyright')) return 'medium';
+          return 'low';
+        })(),
         status: r.status === 'PENDING' ? 'pending' : 'actioned',
         date: r.createdAt
       }));
@@ -335,7 +390,19 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
         animationType: g.animationType || 'fly'
       }));
 
-     set((state) => ({
+const fetchedCampaigns = await adminService.getCampaigns().catch(() => []);
+      const mappedCampaigns = fetchedCampaigns.map((c: any) => ({
+        id: c.id,
+        title: c.title,
+        type: c.type,
+        status: c.status,
+        targetAudience: c.targetAudience || '',
+        dateCreated: c.createdAt,
+        scheduledTime: c.scheduledTime || undefined,
+        hashtag: c.hashtag || undefined,
+      }));
+
+set((state) => ({
         creators: mappedCreators,
         reels: mappedReels,
         transactions: [...mappedTxs, ...mappedWithdrawals],
@@ -344,7 +411,9 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
         gifts: mappedGifts.length > 0 ? mappedGifts : state.gifts,
         dashboardStats: dashboardStats || state.dashboardStats,
         recommendationWeights: configWeights || state.recommendationWeights,
-        coinRateSettings: allConfigs['COIN_RATE_SETTINGS'] || state.coinRateSettings
+        campaigns: mappedCampaigns.length > 0 ? mappedCampaigns : state.campaigns,
+        botProtectionEnabled: dashboardStats?.botProtection?.enabled ?? state.botProtectionEnabled,
+        botProtectionEnabledAt: dashboardStats?.botProtection?.enabledAt ?? state.botProtectionEnabledAt,
       }));
     } catch (error) {
       console.error('Failed to fetch admin data', error);
@@ -457,16 +526,7 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
     }
   },
 
-  updateCoinRates: async (rates) => {
-    try {
-      const updated = { ...usePlatformStore.getState().coinRateSettings, ...rates };
-      await adminService.updateConfig('COIN_RATE_SETTINGS', updated);
-      set((state) => ({ coinRateSettings: updated }));
-    } catch (error) {
-      console.error('Failed to update coin rates', error);
-    }
-  },
-  
+
   addGiftItem: async (gift) => {
     try {
       const savedGift = await adminService.addGift(gift);
@@ -541,22 +601,61 @@ export const usePlatformStore = create<PlatformState & { fetchAllData: () => Pro
   saveWeights: async () => {
     try {
       const state = usePlatformStore.getState();
-      await adminService.updateFeedConfig(state.recommendationWeights);
+   await adminService.updateConfig('recommendationWeights', state.recommendationWeights);
     } catch (error) {
       console.error('Failed to save weights', error);
       throw error;
     }
   },
   
-  toggleBotAttack: () => set((state) => {
-    const current = state.botAttackActive;
-    return { botAttackActive: !current };
-  }),
-  
-  simulateLiveTicks: () => set((state) => {
+simulateLiveTicks: () => set((state) => {
     return state; // Disable simulation on live data
   }),
   
-  resetPlatformStore: () => set(DEFAULT_STATE())
-}));
+fetchFeedBoosts: async () => {
+    try {
+      const boosts = await adminService.getFeedBoosts();
+      set({ feedBoosts: boosts });
+    } catch (error) {
+      console.error('Failed to fetch feed boosts', error);
+    }
+  },
 
+  createFeedBoost: async (data) => {
+    try {
+      const boost = await adminService.createFeedBoost(data);
+      set((state) => ({ feedBoosts: [boost, ...state.feedBoosts] }));
+    } catch (error) {
+      console.error('Failed to create feed boost', error);
+    }
+  },
+
+  deleteFeedBoost: async (boostId) => {
+    try {
+      await adminService.deleteFeedBoost(boostId);
+      set((state) => ({ feedBoosts: state.feedBoosts.filter((b) => b.id !== boostId) }));
+    } catch (error) {
+      console.error('Failed to delete feed boost', error);
+    }
+  },
+
+fetchFeedMetrics: async () => {
+    try {
+      const metrics = await adminService.getFeedMetrics();
+      set({ feedMetrics: metrics });
+    } catch (error) {
+      console.error('Failed to fetch feed metrics', error);
+    }
+  },
+
+  fetchFraudStats: async () => {
+    try {
+      const stats = await adminService.getFraudStats();
+      set({ fraudStats: stats });
+    } catch (error) {
+      console.error('Failed to fetch fraud stats', error);
+    }
+  },
+
+resetPlatformStore: () => {}
+}));
