@@ -374,7 +374,7 @@ useEffect(() => {
         </a>
         <span className="text-muted-foreground/30 hidden sm:inline text-xs">|</span>
         <span className="text-[12px] text-muted-foreground/60">
-          © 2024 POPLI Operations. All rights reserved.
+       © {new Date().getFullYear()} POPLI Operations. All rights reserved.
         </span>
       </footer>
     </div>
