@@ -158,10 +158,12 @@ function useMultiConfig(keys: string[], defaults: Record<string, number>) {
 
   return { values, set, loading, saveAll };
 }
-
 // ─── 1. General Settings ─────────────────────────────────────────────────────
 export function GeneralSettingsPage() {
-  const { value, setValue, loading, save } = useConfig('VIEW_RATE_PER_1000', 5);
+  const KEYS = ['VIEWS_PER_REWARD', 'REWARD_AMOUNT_PAISE'];
+  const DEFAULTS = { VIEWS_PER_REWARD: 200, REWARD_AMOUNT_PAISE: 100 };
+  const { values, set, loading, saveAll } = useMultiConfig(KEYS, DEFAULTS);
+  const [earningsEnabled, setEarningsEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -169,13 +171,30 @@ export function GeneralSettingsPage() {
   }, []);
   useRegisterRefresh(refresh);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+useEffect(() => {
+    adminService.getEarningSettings().then((settings: any) => {
+      if (settings.earningsEnabled !== undefined) setEarningsEnabled(settings.earningsEnabled);
+      if (settings.viewsPerReward !== undefined) set('VIEWS_PER_REWARD', settings.viewsPerReward);
+      if (settings.rewardAmountPaise !== undefined) set('REWARD_AMOUNT_PAISE', settings.rewardAmountPaise);
+    }).catch(console.error);
+  }, []);
+
+  const rewardInr = values['REWARD_AMOUNT_PAISE'] / 100;
+  const viewsPerReward = values['VIEWS_PER_REWARD'];
+  const ratePerThousand = viewsPerReward > 0 ? (rewardInr / viewsPerReward) * 1000 : 0;
+
+const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (value <= 0) { toast.error('Rate must be greater than 0'); return; }
+    if (values['VIEWS_PER_REWARD'] <= 0) { toast.error('Views per milestone must be greater than 0'); return; }
+    if (values['REWARD_AMOUNT_PAISE'] <= 0) { toast.error('Reward amount must be greater than 0'); return; }
     setSaving(true);
     try {
-      await save(value);
-      toast.success('View rate updated');
+      await adminService.updateEarningSettings({
+        viewsPerReward: values['VIEWS_PER_REWARD'],
+        rewardAmountPaise: values['REWARD_AMOUNT_PAISE'],
+        earningsEnabled,
+      });
+      toast.success('Saved — Redis cache cleared and all backend instances updated instantly');
     } catch {
       toast.error('Failed to save');
     } finally {
@@ -185,22 +204,71 @@ export function GeneralSettingsPage() {
 
   return (
     <div>
-      <PageHeader icon={Settings} title="General Settings" subtitle="Core earning rate for view monetization" />
+      <PageHeader icon={TrendingUp} title="Milestone Earnings" subtitle="INR credited to creator wallet per view milestone" />
       <div className="max-w-lg">
         <Card>
-          <CardHeader title="View Rate" subtitle="INR paid to creators per 1,000 valid views" />
+          <CardHeader title="Milestone Configuration" subtitle="Every N valid views triggers one INR credit to the creator wallet" />
           <form onSubmit={handleSubmit} className="space-y-5">
             <ConfigField
-              label="INR per 1,000 views"
-              hint="Changes apply to all new views immediately. Existing pending earnings are not affected."
-              value={value}
-              onChange={setValue}
-              step="0.01"
-              min="0"
+              label="Views per milestone"
+              hint="Number of valid views required to trigger one payout. Currently 200 views = Rs.1"
+              value={values['VIEWS_PER_REWARD']}
+              onChange={(v) => set('VIEWS_PER_REWARD', v)}
+              min="1"
+              step="1"
             />
+    <ConfigField
+              label="Reward per milestone (Rs.)"
+              hint="Amount credited per milestone in rupees. Enter 1 for Rs.1, 2 for Rs.2, 5 for Rs.5"
+              value={rewardInr}
+              onChange={(v) => set('REWARD_AMOUNT_PAISE', Math.round(v * 100))}
+              min="0.01"
+              step="0.01"
+            />
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Earnings Enabled
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEarningsEnabled(!earningsEnabled)}
+                  className="flex items-center gap-2 text-[13px] font-semibold"
+                >
+                  {earningsEnabled ? (
+                    <ToggleRight className="w-8 h-8 text-emerald-500" />
+                  ) : (
+                    <ToggleLeft className="w-8 h-8 text-muted-foreground" />
+                  )}
+                  <span className={earningsEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>
+                    {earningsEnabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </button>
+              </div>
+              <span className="text-[11px] text-muted-foreground leading-relaxed">
+                When disabled no new milestone credits will be processed for any creator
+              </span>
+            </div>
             <InfoBox>
-              <span className="font-semibold text-foreground block mb-1">Example payout</span>
-              A reel with 50,000 valid views earns ₹{((value / 1000) * 50000).toFixed(2)} at the current rate.
+              <span className="font-semibold text-foreground block mb-2">Live payout preview</span>
+              <div className="space-y-1 text-[12px]">
+                <div className="flex justify-between">
+                  <span>{viewsPerReward} views (1 milestone)</span>
+                  <span className="font-semibold text-foreground">Rs.{rewardInr.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>{viewsPerReward * 5} views (5 milestones)</span>
+                  <span className="font-semibold text-foreground">Rs.{(rewardInr * 5).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>{viewsPerReward * 10} views (10 milestones)</span>
+                  <span className="font-semibold text-foreground">Rs.{(rewardInr * 10).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between border-t border-border pt-1 mt-1">
+                  <span>Effective rate per 1000 views</span>
+                  <span className="font-bold text-primary">Rs.{ratePerThousand.toFixed(2)}</span>
+                </div>
+              </div>
             </InfoBox>
             <div className="flex justify-end">
               <SaveButton loading={loading || saving} />
@@ -211,7 +279,6 @@ export function GeneralSettingsPage() {
     </div>
   );
 }
-
 // ─── 2. Creator Earnings ──────────────────────────────────────────────────────
 
 export function CreatorEarningsPage() {

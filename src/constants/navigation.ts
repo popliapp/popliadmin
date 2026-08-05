@@ -82,14 +82,14 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
   {
     label: 'Financial Settings',
     items: [
-      {
-        title: 'General Settings',
+{
+        title: 'Milestone Earnings',
         path: '/financial/general',
-        icon: Settings,
+        icon: TrendingUp,
         permission: 'view_financial_settings',
       },
       {
-        title: 'Creator Earnings',
+        title: 'Engagement Rewards',
         path: '/financial/earnings',
         icon: Coins,
         permission: 'view_financial_settings',

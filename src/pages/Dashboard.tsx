@@ -11,8 +11,7 @@ import {
   Gift,
   Clock,
   Activity,
-  Globe,
-  ChevronDown,
+
   ShieldCheck,
   AlertTriangle,
   Shield,
@@ -207,23 +206,30 @@ useEffect(() => {
     }
   };
 
-  const CITIES = [
-    { id: 'all', name: 'All India' },
-    { id: 'mumbai', name: 'Mumbai' },
-    { id: 'delhi', name: 'Delhi' },
-    { id: 'bengaluru', name: 'Bengaluru' },
-    { id: 'lucknow', name: 'Lucknow' },
-    { id: 'jaipur', name: 'Jaipur' },
-    { id: 'indore', name: 'Indore' },
-    { id: 'madurai', name: 'Madurai' },
-  ];
+const [selectedCity, setSelectedCity] = useState('all');
+  const [availableCities, setAvailableCities] = useState<{ id: string; name: string }[]>([{ id: 'all', name: 'All India' }]);
 
-  const [selectedCity, setSelectedCity] = useState('all');
+  useEffect(() => {
+    adminService.getAnalytics()
+      .then((data) => {
+        if (data?.cityBreakdown?.length > 0) {
+          const cities = [
+            { id: 'all', name: 'All India' },
+            ...data.cityBreakdown.map((c: any) => ({ id: c.city.toLowerCase(), name: c.city })),
+          ];
+          setAvailableCities(cities);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
-  const handleCityChange = (cityId: string) => {
+  const handleCityChange = async (cityId: string) => {
     setSelectedCity(cityId);
-    (window as any).__popli_active_city_filter = cityId;
-    window.dispatchEvent(new CustomEvent('popli_city_changed', { detail: cityId }));
+    const stats = await adminService.getDashboardStats(cityId !== 'all' ? cityId : undefined).catch(() => null);
+    if (stats) {
+      const { dashboardStats: _prev, ...rest } = usePlatformStore.getState() as any;
+      usePlatformStore.setState({ dashboardStats: stats });
+    }
   };
 
 const userGrowthData = dashboardStats?.userGrowthData || [];
@@ -231,10 +237,10 @@ const userGrowthData = dashboardStats?.userGrowthData || [];
   const hasMoodData = moodPieData.length > 0 && moodPieData.some(d => d.value > 0);
 
 
-const totalUsersCount = dashboardStats?.totalUsers ?? creators.filter(c => c.status !== 'suspended').length;
-  const activeUsersCount = dashboardStats?.totalCreators ?? creators.filter((c) => c.status === 'active').length;
-  const totalReelsCount = dashboardStats?.totalReels ?? reels.length;
-  const totalViewsCount = reels.reduce((acc, r) => acc + r.views, 0);
+const totalUsersCount = dashboardStats?.totalUsers ?? 0;
+  const activeUsersCount = dashboardStats?.totalCreators ?? 0;
+  const totalReelsCount = dashboardStats?.totalReels ?? 0;
+  const totalViewsCount = dashboardStats?.totalViews ?? 0;
 
   const formatNumber = (num: number) => {
     if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
@@ -242,7 +248,7 @@ const totalUsersCount = dashboardStats?.totalUsers ?? creators.filter(c => c.sta
     return num.toString();
   };
 
-const processingPercent = moodPieData.reduce((a: number, b: { value: number }) => a + b.value, 0);
+const processingPercent = dashboardStats?.processingPercent ?? (moodPieData.length > 0 ? moodPieData[0]?.value ?? 0 : 0);
  const liveSecurityEvents: any[] = dashboardStats?.securityEvents || [];
 
 return (
@@ -313,19 +319,7 @@ return (
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center">
-            <Globe className="w-4 h-4 text-muted-foreground absolute left-3 pointer-events-none" />
-            <select
-              value={selectedCity}
-              onChange={(e) => handleCityChange(e.target.value)}
-              className="appearance-none h-9 pl-9 pr-8 rounded-lg border border-border bg-card text-[13px] font-medium text-foreground hover:bg-muted transition-colors cursor-pointer outline-none"
-            >
-              {CITIES.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
-          </div>
+      
 <button
             disabled={botProtection.loading}
             onClick={() => setConfirmDialog(botProtection.enabled ? 'disable' : 'enable')}

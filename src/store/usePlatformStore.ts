@@ -213,7 +213,7 @@ freezeEarnings: (userId: string) => void;
   
   // Actions - Payouts & Coins
   approveWithdrawal: (txId: string) => void;
-  rejectWithdrawal: (txId: string) => void;
+rejectWithdrawal: (txId: string, reason: string) => void;
 
   addGiftItem: (gift: Gift) => void;
   deleteGiftItem: (giftId: string) => void;
@@ -289,7 +289,7 @@ const mappedCreators = users.map((u: any) => ({
   followers: u.followersCount || 0,
   following: u.followingCount || 0,
   totalLikes: u.totalLikesReceived || 0,
-  totalViews: u.reels?.reduce((sum: number, r: any) => sum + (r.viewsCount || 0), 0) || 0,
+totalViews: 0,
   coinsEarned: u.wallet?.totalEarnings || 0,
   videoCount: u._count?.reels || 0,
   status: u.isShadowBanned ? 'shadow_banned' : u.isBlocked ? 'suspended' : 'active',
@@ -508,13 +508,12 @@ set((state) => ({
     }));
   },
   
-  rejectWithdrawal: async (txId) => {
-    await adminService.rejectWithdrawal(txId).catch(console.error);
+rejectWithdrawal: async (txId, reason) => {
+    await adminService.rejectWithdrawal(txId, reason).catch(console.error);
     set((state) => ({
       transactions: state.transactions.map((t) => t.id === txId ? { ...t, status: 'rejected' } : t)
     }));
   },
-  
   toggleMonetization: async (userId: string) => {
     try {
       await adminService.toggleUserMonetization(userId);

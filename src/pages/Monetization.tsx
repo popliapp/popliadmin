@@ -189,26 +189,49 @@ const refresh = useCallback(async () => {
   const topEarners = monetizationData?.topEarners ?? [];
   const summary = monetizationData?.summary;
 
+const [approving, setApproving] = useState<string | null>(null);
+
   const handleApprove = async (w: PendingWithdrawal) => {
+    setApproving(w.id);
     try {
       await adminService.approveWithdrawal(w.id);
-      toast.success(`Approved ${formatINR(w.rupees)} for @${w.creatorUsername}`);
+      toast.success(`Payout initiated — ${formatINR(w.rupees)} for @${w.creatorUsername}`);
       loadMonetizationData();
-    } catch {
-      toast.error('Failed to approve withdrawal');
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Failed to approve withdrawal';
+      toast.error(msg);
+    } finally {
+      setApproving(null);
     }
   };
 
-  const handleReject = async (w: PendingWithdrawal) => {
+const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: PendingWithdrawal | null }>({ open: false, withdrawal: null });
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+
+  const handleReject = (w: PendingWithdrawal) => {
+    setRejectModal({ open: true, withdrawal: w });
+    setRejectReason('');
+  };
+
+  const confirmReject = async () => {
+    if (!rejectModal.withdrawal) return;
+    if (!rejectReason.trim() || rejectReason.trim().length < 5) {
+      toast.error('Please enter a rejection reason (min 5 characters)');
+      return;
+    }
+    setRejecting(true);
     try {
-      await adminService.rejectWithdrawal(w.id);
-      toast.error(`Rejected withdrawal for @${w.creatorUsername}. Balance refunded.`);
+      await adminService.rejectWithdrawal(rejectModal.withdrawal.id, rejectReason.trim());
+      toast.success(`Rejected withdrawal for @${rejectModal.withdrawal.creatorUsername}. Balance refunded.`);
+      setRejectModal({ open: false, withdrawal: null });
       loadMonetizationData();
     } catch {
       toast.error('Failed to reject withdrawal');
+    } finally {
+      setRejecting(false);
     }
   };
-
   const handleSaveCoinRates = async (e: React.FormEvent) => {
     e.preventDefault();
     setCoinSaving(true);
@@ -336,18 +359,24 @@ const refresh = useCallback(async () => {
                       <span className="text-[15px] font-bold text-foreground font-mono">
                         {formatINR(w.rupees)}
                       </span>
-                      <div className="flex gap-1.5">
+              <div className="flex gap-1.5">
                         <button
                           onClick={() => handleApprove(w)}
-                          title="Approve withdrawal"
-                          className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/20 transition-colors"
+                          disabled={approving === w.id}
+                          title="Approve and initiate payout"
+                          className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Check className="w-3.5 h-3.5" />
+                          {approving === w.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
                         </button>
                         <button
                           onClick={() => handleReject(w)}
+                          disabled={approving === w.id}
                           title="Reject withdrawal"
-                          className="p-2 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/20 transition-colors"
+                          className="p-2 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -584,6 +613,59 @@ const refresh = useCallback(async () => {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+{rejectModal.open && rejectModal.withdrawal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-[15px] font-semibold text-foreground">Reject Withdrawal</h3>
+                <p className="text-[12px] text-muted-foreground mt-0.5">
+                  @{rejectModal.withdrawal.creatorUsername} — {formatINR(rejectModal.withdrawal.rupees)}
+                </p>
+              </div>
+              <button
+                onClick={() => setRejectModal({ open: false, withdrawal: null })}
+                className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Rejection Reason (mandatory)
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g. Incorrect bank details, KYC pending, Fraud detection..."
+                rows={3}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                This reason will be sent to the creator via notification.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setRejectModal({ open: false, withdrawal: null })}
+                className="flex-1 h-10 border border-border rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmReject}
+                disabled={rejecting || rejectReason.trim().length < 5}
+                className="flex-1 h-10 bg-red-500 hover:bg-red-600 text-white rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {rejecting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {rejecting ? 'Rejecting…' : 'Confirm Reject'}
+              </button>
+            </div>
           </div>
         </div>
       )}

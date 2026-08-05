@@ -9,8 +9,9 @@ export const adminService = {
     return res.data;
   },
 
-  getDashboardStats: async () => {
-    const res = await apiClient.get('/admin/dashboard-stats');
+getDashboardStats: async (city?: string) => {
+    const params = city ? { city } : {};
+    const res = await apiClient.get('/admin/dashboard-stats', { params });
     return res.data;
   },
 
@@ -104,8 +105,8 @@ getTransactions: async () => {
     return res.data;
   },
 
-  rejectWithdrawal: async (txId: string) => {
-    const res = await apiClient.post(`/admin/withdrawals/${txId}/reject`);
+rejectWithdrawal: async (txId: string, reason: string) => {
+    const res = await apiClient.post(`/admin/withdrawals/${txId}/reject`, { reason });
     return res.data;
   },
 
@@ -263,8 +264,22 @@ getFeatureFlags: async () => {
     return res.data;
   },
 
-  getMonetizationSummary: async () => {
+getMonetizationSummary: async () => {
     const res = await apiClient.get('/admin/monetization-summary');
+    return res.data;
+  },
+
+  getEarningSettings: async () => {
+    const res = await apiClient.get('/admin/platform/earning-settings');
+    return res.data;
+  },
+
+  updateEarningSettings: async (data: {
+    viewsPerReward?: number;
+    rewardAmountPaise?: number;
+    earningsEnabled?: boolean;
+  }) => {
+    const res = await apiClient.patch('/admin/platform/earning-settings', data);
     return res.data;
   },
 
