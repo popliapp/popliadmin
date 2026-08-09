@@ -269,6 +269,16 @@ getMonetizationSummary: async () => {
     return res.data;
   },
 
+  getPaymentRecords: async () => {
+    const res = await apiClient.get('/admin/payment-records');
+    return res.data;
+  },
+
+  executeCoinRefund: async (paymentRecordId: string, data: { refundType: 'FULL' | 'PARTIAL'; amount?: number; reason: string }) => {
+    const res = await apiClient.post(`/admin/payment-records/${paymentRecordId}/refund`, data);
+    return res.data;
+  },
+
   getEarningSettings: async () => {
     const res = await apiClient.get('/admin/platform/earning-settings');
     return res.data;

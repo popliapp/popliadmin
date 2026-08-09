@@ -76,9 +76,36 @@ const TABS = [
   { id: 'withdrawal', label: 'Withdrawal Payouts' },
   { id: 'coin-economy', label: 'Coin Economy' },
   { id: 'referrals', label: 'Referral Rewards' },
+  { id: 'refunds', label: 'Coin Refunds' },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
+
+interface PaymentRecord {
+  id: string;
+  userId: string;
+  packageId: string;
+  razorpayOrderId: string;
+  razorpayPaymentId: string | null;
+  amount: number;
+  coinsToCredit: number;
+  status: string;
+  paymentMethod: string | null;
+  verifiedAt: string | null;
+  createdAt: string;
+  refunds: CoinRefund[];
+}
+
+interface CoinRefund {
+  id: string;
+  razorpayRefundId: string | null;
+  amount: number;
+  coinsDeducted: number;
+  reason: string;
+  status: string;
+  processedAt: string | null;
+  createdAt: string;
+}
 
 interface TopEarner {
   id: string;
@@ -189,7 +216,106 @@ const refresh = useCallback(async () => {
   const topEarners = monetizationData?.topEarners ?? [];
   const summary = monetizationData?.summary;
 
-const [approving, setApproving] = useState<string | null>(null);
+const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
+  const [paymentRecordsLoading, setPaymentRecordsLoading] = useState(false);
+  const [expandedRecord, setExpandedRecord] = useState<string | null>(null);
+  const [refundModal, setRefundModal] = useState<{
+    open: boolean;
+    record: PaymentRecord | null;
+  }>({ open: false, record: null });
+  const [refundForm, setRefundForm] = useState<{
+    refundType: 'FULL' | 'PARTIAL';
+    amount: string;
+    reason: string;
+  }>({ refundType: 'FULL', amount: '', reason: '' });
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const [refundSuccess, setRefundSuccess] = useState<{
+    razorpayRefundId: string;
+    refundAmount: number;
+    coinsDeducted: number;
+    status: string;
+  } | null>(null);
+
+  const loadPaymentRecords = useCallback(async () => {
+    setPaymentRecordsLoading(true);
+    try {
+      const data = await adminService.getPaymentRecords();
+      setPaymentRecords(data);
+    } catch {
+      toast.error('Failed to load payment records');
+    } finally {
+      setPaymentRecordsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'refunds' && paymentRecords.length === 0) {
+      loadPaymentRecords();
+    }
+  }, [activeTab]);
+
+  const getMaxRefundable = (record: PaymentRecord) => {
+    const totalRefunded = record.refunds
+      .filter(r => r.status === 'COMPLETED')
+      .reduce((s, r) => s + r.amount, 0);
+    return record.amount - totalRefunded;
+  };
+
+  const handleOpenRefundModal = (record: PaymentRecord) => {
+    const max = getMaxRefundable(record);
+    setRefundForm({ refundType: 'FULL', amount: String(max), reason: '' });
+    setRefundSuccess(null);
+    setRefundModal({ open: true, record });
+  };
+
+  const handleSubmitRefund = async () => {
+    if (!refundModal.record) return;
+    if (!refundForm.reason.trim()) {
+      toast.error('Refund reason is required.');
+      return;
+    }
+    const max = getMaxRefundable(refundModal.record);
+    if (refundForm.refundType === 'PARTIAL') {
+      const amt = parseFloat(refundForm.amount);
+      if (!amt || amt <= 0 || amt > max) {
+        toast.error(`Partial refund amount must be between 1 and ${max}.`);
+        return;
+      }
+    }
+    setRefundSubmitting(true);
+    try {
+      const result = await adminService.executeCoinRefund(refundModal.record.id, {
+        refundType: refundForm.refundType,
+        amount: refundForm.refundType === 'PARTIAL' ? parseFloat(refundForm.amount) : undefined,
+        reason: refundForm.reason.trim(),
+      });
+      setRefundSuccess({
+        razorpayRefundId: result.razorpayRefundId,
+        refundAmount: result.refundAmount,
+        coinsDeducted: result.coinsDeducted,
+        status: result.status,
+      });
+      loadPaymentRecords();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Failed to process refund.');
+    } finally {
+      setRefundSubmitting(false);
+    }
+  };
+
+  const refundStatusBadge = (status: string) => {
+    const map: Record<string, string> = {
+      COMPLETED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      PROCESSING: 'bg-amber-50 text-amber-700 border-amber-200',
+      FAILED: 'bg-red-50 text-red-700 border-red-200',
+      SUCCESS: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      REFUNDED: 'bg-rose-50 text-rose-700 border-rose-200',
+      PARTIALLY_REFUNDED: 'bg-orange-50 text-orange-700 border-orange-200',
+    };
+    return map[status] || 'bg-muted text-foreground border-border';
+  };
+
+  const [approving, setApproving] = useState<string | null>(null);
 
   const handleApprove = async (w: PendingWithdrawal) => {
     setApproving(w.id);
@@ -616,7 +742,285 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
           </div>
         </div>
       )}
-{rejectModal.open && rejectModal.withdrawal && (
+{activeTab === 'refunds' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-[15px] font-semibold text-foreground">Coin Purchase Refunds</h2>
+              <p className="text-[12px] text-muted-foreground mt-0.5">
+                Refund accidental coin purchases back to user bank accounts via Razorpay.
+              </p>
+            </div>
+            <button
+              onClick={loadPaymentRecords}
+              disabled={paymentRecordsLoading}
+              className="w-8 h-8 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', paymentRecordsLoading && 'animate-spin')} />
+            </button>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            {paymentRecordsLoading ? (
+              <div className="p-5 space-y-3">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : paymentRecords.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                <Coins className="w-8 h-8 text-muted-foreground opacity-30" />
+                <p className="text-[13px] font-semibold text-foreground">No payment records found</p>
+                <p className="text-[12px] text-muted-foreground">Successful coin purchases will appear here.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted/50 border-b border-border text-muted-foreground font-bold text-[10px] uppercase">
+                    <tr>
+                      <th className="px-5 py-3">Payment ID</th>
+                      <th className="px-5 py-3">User ID</th>
+                      <th className="px-5 py-3">Amount</th>
+                      <th className="px-5 py-3">Coins</th>
+                      <th className="px-5 py-3">Date</th>
+                      <th className="px-5 py-3 text-center">Status</th>
+                      <th className="px-5 py-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {paymentRecords.map(record => {
+                      const max = getMaxRefundable(record);
+                      const totalRefunded = record.refunds
+                        .filter(r => r.status === 'COMPLETED')
+                        .reduce((s, r) => s + r.amount, 0);
+                      const isExpanded = expandedRecord === record.id;
+                      const canRefund = ['SUCCESS', 'PARTIALLY_REFUNDED'].includes(record.status) && max > 0 && record.razorpayPaymentId;
+
+                      return (
+                        <>
+                          <tr
+                            key={record.id}
+                            className="hover:bg-muted/20 cursor-pointer"
+                            onClick={() => setExpandedRecord(isExpanded ? null : record.id)}
+                          >
+                            <td className="px-5 py-3 font-mono text-[11px] text-muted-foreground">
+                              {record.razorpayPaymentId?.slice(0, 16) ?? '-'}...
+                            </td>
+                            <td className="px-5 py-3 font-mono text-[11px] text-muted-foreground">
+                              {record.userId.slice(0, 12)}...
+                            </td>
+                            <td className="px-5 py-3 font-bold text-foreground">
+                              {formatINR(record.amount)}
+                              {totalRefunded > 0 && (
+                                <div className="text-[10px] text-rose-500 font-medium">
+                                  -{formatINR(totalRefunded)} refunded
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-5 py-3 text-foreground">{record.coinsToCredit}</td>
+                            <td className="px-5 py-3 text-[11px] text-muted-foreground">
+                              {new Date(record.createdAt).toLocaleString('en-IN')}
+                            </td>
+                            <td className="px-5 py-3 text-center">
+                              <span className={cn('text-[10px] font-bold px-2 py-0.5 border rounded-full inline-block', refundStatusBadge(record.status))}>
+                                {record.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3 text-right" onClick={e => e.stopPropagation()}>
+                              {canRefund && (
+                                <button
+                                  onClick={() => handleOpenRefundModal(record)}
+                                  className="text-rose-600 hover:text-rose-800 text-[11px] font-bold hover:underline"
+                                >
+                                  Refund
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                          {isExpanded && record.refunds.length > 0 && (
+                            <tr key={`${record.id}-refunds`}>
+                              <td colSpan={7} className="px-5 pb-3 pt-0 bg-rose-50/40">
+                                <div className="border border-rose-100 rounded-lg overflow-hidden">
+                                  <div className="px-4 py-2 bg-rose-50 border-b border-rose-100">
+                                    <span className="text-[10px] font-black text-rose-700 uppercase tracking-wider">
+                                      Refund History ({record.refunds.length})
+                                    </span>
+                                  </div>
+                                  {record.refunds.map(r => (
+                                    <div key={r.id} className="px-4 py-2.5 flex items-center justify-between border-b border-rose-50 last:border-0 bg-white">
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-mono text-[10px] text-muted-foreground">
+                                            {r.razorpayRefundId ?? r.id.slice(0, 14)}...
+                                          </span>
+                                          <span className={cn('text-[9px] font-black px-1.5 py-0.5 rounded border uppercase', refundStatusBadge(r.status))}>
+                                            {r.status}
+                                          </span>
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground">Reason: {r.reason}</p>
+                                        <p className="text-[10px] text-muted-foreground">
+                                          {new Date(r.createdAt).toLocaleString('en-IN')}
+                                          {r.processedAt ? ` — Processed: ${new Date(r.processedAt).toLocaleString('en-IN')}` : ''}
+                                        </p>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="text-sm font-black text-rose-600">-{formatINR(r.amount)}</div>
+                                        <div className="text-[10px] text-muted-foreground">{r.coinsDeducted} coins deducted</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {refundModal.open && refundModal.record && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <div>
+                <h2 className="text-base font-black text-foreground">Refund Coin Purchase</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Max refundable: <span className="font-bold text-foreground">{formatINR(getMaxRefundable(refundModal.record))}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => { setRefundModal({ open: false, record: null }); setRefundSuccess(null); }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {refundSuccess ? (
+              <div className="p-6 space-y-4">
+                <div className="flex flex-col items-center text-center gap-3 py-2">
+                  <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                    <Check className="w-7 h-7 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-black text-foreground text-base">
+                      Refund {refundSuccess.status === 'COMPLETED' ? 'Processed' : 'Initiated'}
+                    </p>
+                    <p className="text-[12px] text-muted-foreground mt-1">
+                      {formatINR(refundSuccess.refundAmount)} will be credited within 5-7 business days.
+                    </p>
+                    <p className="text-[11px] text-amber-600 font-medium mt-1">
+                      {refundSuccess.coinsDeducted} coins deducted from user wallet.
+                    </p>
+                  </div>
+                </div>
+                {refundSuccess.razorpayRefundId && (
+                  <div className="bg-muted/40 border border-border rounded-lg px-4 py-3 text-center space-y-1">
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Razorpay Refund ID</p>
+                    <p className="font-mono text-[12px] font-bold text-foreground">{refundSuccess.razorpayRefundId}</p>
+                  </div>
+                )}
+                <button
+                  onClick={() => { setRefundModal({ open: false, record: null }); setRefundSuccess(null); }}
+                  className="w-full border border-border rounded-lg py-2.5 text-sm font-bold text-foreground hover:bg-muted/30 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-foreground mb-2 uppercase tracking-wider">
+                    Refund Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['FULL', 'PARTIAL'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setRefundForm(f => ({
+                          ...f,
+                          refundType: type,
+                          amount: type === 'FULL' ? String(getMaxRefundable(refundModal.record!)) : '',
+                        }))}
+                        className={cn(
+                          'py-2.5 rounded-lg border text-sm font-bold transition-all',
+                          refundForm.refundType === type
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {type === 'FULL' ? `Full — ${formatINR(getMaxRefundable(refundModal.record!))}` : 'Partial'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {refundForm.refundType === 'PARTIAL' && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-foreground mb-1.5 uppercase tracking-wider">
+                      Amount (INR)
+                    </label>
+                    <input
+                      type="number"
+                      value={refundForm.amount}
+                      onChange={e => setRefundForm(f => ({ ...f, amount: e.target.value }))}
+                      max={getMaxRefundable(refundModal.record)}
+                      min={1}
+                      className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground outline-none focus:ring-2 focus:ring-primary"
+                      placeholder={`Max ${getMaxRefundable(refundModal.record)}`}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-bold text-foreground mb-1.5 uppercase tracking-wider">
+                    Reason
+                  </label>
+                  <textarea
+                    value={refundForm.reason}
+                    onChange={e => setRefundForm(f => ({ ...f, reason: e.target.value }))}
+                    rows={3}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground outline-none focus:ring-2 focus:ring-primary resize-none"
+                    placeholder="State the reason for this refund..."
+                  />
+                </div>
+
+                <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-3">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    This will initiate a real refund via Razorpay and deduct the proportional coins from the user wallet. This cannot be undone.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => setRefundModal({ open: false, record: null })}
+                    className="flex-1 border border-border rounded-lg py-2.5 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSubmitRefund}
+                    disabled={refundSubmitting}
+                    className="flex-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg py-2.5 text-sm font-black disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {refundSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                    {refundSubmitting ? 'Processing...' : 'Confirm Refund'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {rejectModal.open && rejectModal.withdrawal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <div className="flex items-start justify-between">
