@@ -100,13 +100,34 @@ getTransactions: async () => {
     return res.data;
   },
 
- approveWithdrawal: async (txId: string) => {
-    const res = await apiClient.post(`/admin/withdrawals/${txId}/approve`);
+reviewWithdrawal: async (reqId: string) => {
+    const res = await apiClient.get(`/admin/withdrawals/${reqId}/review`);
     return res.data;
   },
 
-rejectWithdrawal: async (txId: string, reason: string) => {
+  createPaymentDraft: async (reqId: string, approvedAmount: number) => {
+    const res = await apiClient.post(`/admin/withdrawals/${reqId}/draft`, { approvedAmount });
+    return res.data;
+  },
+
+  sendWithdrawalPayout: async (reqId: string) => {
+    const res = await apiClient.post(`/admin/withdrawals/${reqId}/send`);
+    return res.data;
+  },
+
+  rejectWithdrawal: async (txId: string, reason: string) => {
     const res = await apiClient.post(`/admin/withdrawals/${txId}/reject`, { reason });
+    return res.data;
+  },
+
+  getPaymentProcessList: async (status?: string) => {
+    const params = status ? { status } : {};
+    const res = await apiClient.get('/admin/payment-process', { params });
+    return res.data;
+  },
+
+  getPaymentProcessDetail: async (reqId: string) => {
+    const res = await apiClient.get(`/admin/payment-process/${reqId}`);
     return res.data;
   },
 

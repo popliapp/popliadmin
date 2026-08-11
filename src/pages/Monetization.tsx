@@ -315,19 +315,68 @@ const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
     return map[status] || 'bg-muted text-foreground border-border';
   };
 
-  const [approving, setApproving] = useState<string | null>(null);
+const [reviewModal, setReviewModal] = useState<{ open: boolean; data: any | null }>({ open: false, data: null });
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [draftStep, setDraftStep] = useState<'amount' | 'confirm' | null>(null);
+  const [selectedAmountType, setSelectedAmountType] = useState<'full' | 'partial' | 'custom'>('full');
+  const [customAmount, setCustomAmount] = useState('');
+  const [draftSubmitting, setDraftSubmitting] = useState(false);
+  const [sendingPayment, setSendingPayment] = useState(false);
+  const [draftData, setDraftData] = useState<any | null>(null);
 
-  const handleApprove = async (w: PendingWithdrawal) => {
-    setApproving(w.id);
+  const getApprovedAmount = (reviewData: any): number => {
+    if (selectedAmountType === 'full') return reviewData.amount;
+    if (selectedAmountType === 'partial') return Math.round(reviewData.amount * 0.7 * 100) / 100;
+    return parseFloat(customAmount) || 0;
+  };
+
+  const handleOpenReview = async (w: PendingWithdrawal) => {
+    setReviewLoading(true);
+    setDraftStep('amount');
+    setSelectedAmountType('full');
+    setCustomAmount('');
+    setDraftData(null);
     try {
-      await adminService.approveWithdrawal(w.id);
-      toast.success(`Payout initiated — ${formatINR(w.rupees)} for @${w.creatorUsername}`);
+      const data = await adminService.reviewWithdrawal(w.id);
+      setReviewModal({ open: true, data });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Failed to load withdrawal details');
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  const handleCreateDraft = async () => {
+    if (!reviewModal.data) return;
+    const amt = getApprovedAmount(reviewModal.data);
+    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return; }
+    if (amt > reviewModal.data.amount) { toast.error('Amount cannot exceed requested amount'); return; }
+    if (amt > reviewModal.data.creator.availableBalance) { toast.error('Amount exceeds creator available balance'); return; }
+    setDraftSubmitting(true);
+    try {
+      const draft = await adminService.createPaymentDraft(reviewModal.data.id, amt);
+      setDraftData(draft);
+      setDraftStep('confirm');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Failed to create payment draft');
+    } finally {
+      setDraftSubmitting(false);
+    }
+  };
+
+  const handleConfirmSend = async () => {
+    if (!reviewModal.data) return;
+    setSendingPayment(true);
+    try {
+      await adminService.sendWithdrawalPayout(reviewModal.data.id);
+      toast.success('Payment sent via Cashfree. Status will update via webhook.');
+      setReviewModal({ open: false, data: null });
+      setDraftStep(null);
       loadMonetizationData();
     } catch (e: any) {
-      const msg = e?.response?.data?.message || 'Failed to approve withdrawal';
-      toast.error(msg);
+      toast.error(e?.response?.data?.message || 'Failed to send payment');
     } finally {
-      setApproving(null);
+      setSendingPayment(false);
     }
   };
 
@@ -485,22 +534,17 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
                       <span className="text-[15px] font-bold text-foreground font-mono">
                         {formatINR(w.rupees)}
                       </span>
-              <div className="flex gap-1.5">
+        <div className="flex gap-1.5">
                         <button
-                          onClick={() => handleApprove(w)}
-                          disabled={approving === w.id}
-                          title="Approve and initiate payout"
+                          onClick={() => handleOpenReview(w)}
+                          disabled={reviewLoading}
+                          title="Review and process withdrawal"
                           className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {approving === w.id ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Check className="w-3.5 h-3.5" />
-                          )}
+                          <Check className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleReject(w)}
-                          disabled={approving === w.id}
                           title="Reject withdrawal"
                           className="p-2 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -1016,6 +1060,148 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+  {reviewModal.open && reviewModal.data && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg my-4">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <div>
+                <h2 className="text-[15px] font-black text-foreground">
+                  {draftStep === 'confirm' ? 'Confirm Payment' : 'Review Withdrawal'}
+                </h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  @{reviewModal.data.creator.username} — Requested {formatINR(reviewModal.data.amount)}
+                </p>
+              </div>
+              <button onClick={() => { setReviewModal({ open: false, data: null }); setDraftStep(null); }} className="text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+              <div className="bg-muted/40 border border-border rounded-xl p-4 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Creator</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+                  <span className="text-muted-foreground">Name</span><span className="text-foreground font-semibold">{reviewModal.data.creator.name}</span>
+                  <span className="text-muted-foreground">Username</span><span className="text-foreground font-semibold">@{reviewModal.data.creator.username}</span>
+                  <span className="text-muted-foreground">Email</span><span className="text-foreground truncate">{reviewModal.data.creator.email}</span>
+                  <span className="text-muted-foreground">Available Balance</span><span className="text-emerald-600 font-bold">{formatINR(reviewModal.data.creator.availableBalance)}</span>
+                </div>
+              </div>
+
+              {reviewModal.data.paymentMethod && (
+                <div className="bg-muted/40 border border-border rounded-xl p-4 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Payment Method</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+                    <span className="text-muted-foreground">Type</span><span className="text-foreground font-semibold">{reviewModal.data.paymentMethod.type}</span>
+                    {reviewModal.data.paymentMethod.type === 'UPI' && (
+                      <><span className="text-muted-foreground">UPI ID</span><span className="text-foreground font-semibold">{reviewModal.data.paymentMethod.upiId}</span></>
+                    )}
+                    {reviewModal.data.paymentMethod.type === 'BANK' && (
+                      <>
+                        <span className="text-muted-foreground">Account</span><span className="text-foreground font-semibold">{reviewModal.data.paymentMethod.accountNumber}</span>
+                        <span className="text-muted-foreground">IFSC</span><span className="text-foreground font-semibold">{reviewModal.data.paymentMethod.ifscCode}</span>
+                      </>
+                    )}
+                    <span className="text-muted-foreground">Verified</span>
+                    <span className={reviewModal.data.paymentMethod.verified ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold'}>
+                      {reviewModal.data.paymentMethod.verified ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {draftStep === 'amount' && (
+                <div className="space-y-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Select Payout Amount</p>
+                  <div className="space-y-2">
+                    {(['full', 'partial', 'custom'] as const).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => setSelectedAmountType(type)}
+                        className={cn(
+                          'w-full flex items-center justify-between px-4 py-3 rounded-xl border text-[13px] font-semibold transition-all',
+                          selectedAmountType === type
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        <span>
+                          {type === 'full' && 'Pay Full Amount'}
+                          {type === 'partial' && 'Pay Partial (~70%)'}
+                          {type === 'custom' && 'Enter Custom Amount'}
+                        </span>
+                        <span className="font-bold">
+                          {type === 'full' && formatINR(reviewModal.data.amount)}
+                          {type === 'partial' && formatINR(Math.round(reviewModal.data.amount * 0.7 * 100) / 100)}
+                          {type === 'custom' && (customAmount ? formatINR(parseFloat(customAmount) || 0) : '—')}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {selectedAmountType === 'custom' && (
+                    <input
+                      type="number"
+                      value={customAmount}
+                      onChange={(e) => setCustomAmount(e.target.value)}
+                      placeholder={`Max ${reviewModal.data.amount}`}
+                      className="w-full h-10 bg-muted border border-border rounded-lg px-3 text-[13px] text-foreground outline-none focus:border-primary"
+                    />
+                  )}
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={() => setReviewModal({ open: false, data: null })} className="flex-1 h-10 border border-border rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCreateDraft}
+                      disabled={draftSubmitting}
+                      className="flex-1 h-10 bg-primary text-white rounded-lg text-[13px] font-black disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {draftSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      {draftSubmitting ? 'Creating Draft...' : 'Create Payment Draft'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {draftStep === 'confirm' && draftData && (
+                <div className="space-y-4">
+                  <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-4 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Payment Summary</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+                      <span className="text-muted-foreground">Approved Amount</span><span className="text-foreground font-bold">{formatINR(draftData.approvedAmount)}</span>
+                      <span className="text-muted-foreground">TDS Deducted</span><span className="text-red-500 font-semibold">-{formatINR(draftData.tdsDeducted)}</span>
+                      <span className="text-muted-foreground">Platform Fee</span><span className="text-red-500 font-semibold">-{formatINR(draftData.platformFeeDeducted)}</span>
+                      <span className="text-muted-foreground font-bold">Net to Creator</span><span className="text-emerald-600 font-black">{formatINR(draftData.netPayable)}</span>
+                    </div>
+                  </div>
+                  <div className="bg-muted/40 border border-border rounded-xl p-4 space-y-1 text-[12px]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Payment Service</p>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Provider</span><span className="text-foreground font-bold">Cashfree Payouts</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Environment</span><span className="text-foreground font-semibold capitalize">{draftData.cashfreeEnvironment}</span></div>
+                  </div>
+                  <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-lg px-3.5 py-3 text-[11px] text-blue-800 dark:text-blue-300">
+                    This will initiate a real Cashfree payout. Once sent, the status will update via webhook. This cannot be undone.
+                  </div>
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setDraftStep('amount')} className="flex-1 h-10 border border-border rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted">
+                      Back
+                    </button>
+                    <button
+                      onClick={handleConfirmSend}
+                      disabled={sendingPayment}
+                      className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[13px] font-black disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {sendingPayment && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      {sendingPayment ? 'Sending...' : 'Confirm & Send Payment'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

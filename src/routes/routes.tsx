@@ -30,6 +30,7 @@ import {
 } from '@/pages/FinancialSettings';
 import { CoinPackagesPage } from '@/pages/CoinPackagesPage';
 import { AdminPartnersPage } from '@/pages/AdminPartners';
+import { PaymentProcessPage } from '@/pages/PaymentProcess';
 
 export const router = createBrowserRouter([
   {
@@ -80,11 +81,27 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-      {
+ {
         path: 'monetization',
         element: (
           <ProtectedRoute requiredPermission="view_monetization">
             <MonetizationPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'payment-process',
+        element: (
+          <ProtectedRoute requiredPermission="view_monetization">
+            <PaymentProcessPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'payment-process/:id',
+        element: (
+          <ProtectedRoute requiredPermission="view_monetization">
+            <PaymentProcessPage />
           </ProtectedRoute>
         ),
       },

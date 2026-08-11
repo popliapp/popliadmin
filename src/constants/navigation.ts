@@ -143,12 +143,18 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
       },
     ],
   },
-  {
+{
     label: 'Operations',
     items: [
       {
         title: 'Monetization',
         path: '/monetization',
+        icon: Wallet,
+        permission: 'view_monetization',
+      },
+      {
+        title: 'Payment Process',
+        path: '/payment-process',
         icon: Wallet,
         permission: 'view_monetization',
       },
