@@ -20,6 +20,11 @@ getDashboardStats: async (city?: string) => {
     return res.data;
   },
 
+  getReferrals: async () => {
+    const res = await apiClient.get('/admin/referrals');
+    return res.data;
+  },
+
   getReels: async () => {
     const res = await apiClient.get('/admin/reels');
     return res.data;

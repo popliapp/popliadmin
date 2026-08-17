@@ -54,6 +54,12 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
         permission: 'view_users',
       },
       {
+        title: 'Referrals Log',
+        path: '/referrals-log',
+        icon: UserPlus,
+        permission: 'view_users',
+      },
+      {
         title: 'Reel Management',
         path: '/reels',
         icon: Video,

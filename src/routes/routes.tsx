@@ -4,6 +4,7 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { LoginPage } from '@/pages/Login';
 import { DashboardPage } from '@/pages/Dashboard';
 import { UsersPage } from '@/pages/Users';
+import { ReferralsPage } from '@/pages/Referrals';
 import { ReelsPage } from '@/pages/Reels';
 import { FeedControlPage } from '@/pages/FeedControl';
 import { MonetizationPage } from '@/pages/Monetization';
@@ -62,6 +63,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermission="view_users">
             <UsersPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'referrals-log',
+        element: (
+          <ProtectedRoute requiredPermission="view_users">
+            <ReferralsPage />
           </ProtectedRoute>
         ),
       },
