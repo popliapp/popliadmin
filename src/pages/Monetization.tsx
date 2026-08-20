@@ -85,8 +85,8 @@ interface PaymentRecord {
   id: string;
   userId: string;
   packageId: string;
-  razorpayOrderId: string;
-  razorpayPaymentId: string | null;
+  gatewayOrderId: string;
+  gatewayPaymentId: string | null;
   amount: number;
   coinsToCredit: number;
   status: string;
@@ -98,7 +98,7 @@ interface PaymentRecord {
 
 interface CoinRefund {
   id: string;
-  razorpayRefundId: string | null;
+  gatewayRefundId: string | null;
   amount: number;
   coinsDeducted: number;
   reason: string;
@@ -230,7 +230,7 @@ const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
   }>({ refundType: 'FULL', amount: '', reason: '' });
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundSuccess, setRefundSuccess] = useState<{
-    razorpayRefundId: string;
+    gatewayRefundId: string;
     refundAmount: number;
     coinsDeducted: number;
     status: string;
@@ -290,7 +290,7 @@ const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
         reason: refundForm.reason.trim(),
       });
       setRefundSuccess({
-        razorpayRefundId: result.razorpayRefundId,
+        gatewayRefundId: result.gatewayRefundId,
         refundAmount: result.refundAmount,
         coinsDeducted: result.coinsDeducted,
         status: result.status,
@@ -792,7 +792,7 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
             <div>
               <h2 className="text-[15px] font-semibold text-foreground">Coin Purchase Refunds</h2>
               <p className="text-[12px] text-muted-foreground mt-0.5">
-                Refund accidental coin purchases back to user bank accounts via Razorpay.
+                Refund accidental coin purchases back to user bank accounts via Cashfree.
               </p>
             </div>
             <button
@@ -838,7 +838,7 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
                         .filter(r => r.status === 'COMPLETED')
                         .reduce((s, r) => s + r.amount, 0);
                       const isExpanded = expandedRecord === record.id;
-                      const canRefund = ['SUCCESS', 'PARTIALLY_REFUNDED'].includes(record.status) && max > 0 && record.razorpayPaymentId;
+                      const canRefund = ['SUCCESS', 'PARTIALLY_REFUNDED'].includes(record.status) && max > 0 && record.gatewayPaymentId;
 
                       return (
                         <>
@@ -848,7 +848,7 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
                             onClick={() => setExpandedRecord(isExpanded ? null : record.id)}
                           >
                             <td className="px-5 py-3 font-mono text-[11px] text-muted-foreground">
-                              {record.razorpayPaymentId?.slice(0, 16) ?? '-'}...
+                              {record.gatewayPaymentId?.slice(0, 16) ?? '-'}...
                             </td>
                             <td className="px-5 py-3 font-mono text-[11px] text-muted-foreground">
                               {record.userId.slice(0, 12)}...
@@ -895,7 +895,7 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
                                       <div className="space-y-0.5">
                                         <div className="flex items-center gap-2">
                                           <span className="font-mono text-[10px] text-muted-foreground">
-                                            {r.razorpayRefundId ?? r.id.slice(0, 14)}...
+                                            {r.gatewayRefundId ?? r.id.slice(0, 14)}...
                                           </span>
                                           <span className={cn('text-[9px] font-black px-1.5 py-0.5 rounded border uppercase', refundStatusBadge(r.status))}>
                                             {r.status}
@@ -964,10 +964,10 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
                     </p>
                   </div>
                 </div>
-                {refundSuccess.razorpayRefundId && (
+                {refundSuccess.gatewayRefundId && (
                   <div className="bg-muted/40 border border-border rounded-lg px-4 py-3 text-center space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Razorpay Refund ID</p>
-                    <p className="font-mono text-[12px] font-bold text-foreground">{refundSuccess.razorpayRefundId}</p>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Cashfree Refund ID</p>
+                    <p className="font-mono text-[12px] font-bold text-foreground">{refundSuccess.gatewayRefundId}</p>
                   </div>
                 )}
                 <button
@@ -1038,7 +1038,7 @@ const [rejectModal, setRejectModal] = useState<{ open: boolean; withdrawal: Pend
                 <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-3">
                   <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-amber-800 leading-relaxed">
-                    This will initiate a real refund via Razorpay and deduct the proportional coins from the user wallet. This cannot be undone.
+                    This will initiate a real refund via Cashfree and deduct the proportional coins from the user wallet. This cannot be undone.
                   </p>
                 </div>
 

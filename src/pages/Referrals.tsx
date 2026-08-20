@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { adminService } from '../services/adminService';
-import { Search, Users, Calendar, ArrowRight, UserPlus } from 'lucide-react';
+import { Search, Users, Calendar, ArrowRight} from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const ReferralsPage: React.FC = () => {
@@ -36,7 +36,6 @@ export const ReferralsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-[26px] font-bold text-foreground tracking-tight flex items-center gap-3">
-            <UserPlus className="w-8 h-8 text-primary" />
             Referrals Log
           </h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">Track user referrals across the platform</p>

@@ -290,7 +290,7 @@ const mappedCreators = users.map((u: any) => ({
   following: u.followingCount || 0,
   totalLikes: u.totalLikesReceived || 0,
 totalViews: 0,
-  coinsEarned: u.wallet?.totalEarnings || 0,
+  coinsEarned: u.wallet?.coinBalance || 0,
   videoCount: u._count?.reels || 0,
   status: u.isShadowBanned ? 'shadow_banned' : u.isBlocked ? 'suspended' : 'active',
   isVerified: u.isVerified || false,
@@ -326,14 +326,14 @@ const mappedReels = reels.map((r: any) => ({
         musicName: r.musicName || '',
         taggedUsers: r.taggedUsers || [],
       }));
-    const mappedTxs = txs.map((t: any) => ({
+      const mappedTxs = txs.map((t: any) => ({
         id: t.id,
         creatorName: t.wallet?.user?.name || 'Unknown',
         creatorUsername: t.wallet?.user?.username || 'unknown',
-      amount: t.amount,
+        amount: t.coinsCredited || 0,
         rupees: t.currency === 'INR' ? t.amount : 0,
-        type: t.type === 'WITHDRAWAL' ? 'withdrawal' : 'purchase',
-        status: t.status.toLowerCase(),
+        type: (t.type === 'WITHDRAWAL' ? 'withdrawal' : 'purchase') as any,
+        status: t.status.toLowerCase() as any,
         date: t.createdAt,
         method: t.description || 'UPI'
       }));
@@ -342,12 +342,12 @@ const mappedReels = reels.map((r: any) => ({
         id: w.id,
         creatorName: w.wallet?.user?.name || 'Unknown',
         creatorUsername: w.wallet?.user?.username || 'unknown',
-      amount: w.amount,
+        amount: 0,
         rupees: w.amount,
-        type: 'withdrawal',
-        status: w.status.toLowerCase(),
+        type: 'withdrawal' as any,
+        status: w.status.toLowerCase() as any,
         date: w.createdAt,
-      method: w.wallet?.user?.kycRecord?.upiId || '—'
+        method: w.wallet?.user?.kycRecord?.upiId || '—'
       }));
 
       const mappedReports = reports.map((r: any) => ({
@@ -502,12 +502,12 @@ set((state) => ({
 
   // Payouts & Coins
   approveWithdrawal: async (txId) => {
-    await adminService.approveWithdrawal(txId).catch(console.error);
+    await adminService.reviewWithdrawal(txId).catch(console.error);
     set((state) => ({
       transactions: state.transactions.map((t) => t.id === txId ? { ...t, status: 'completed' } : t)
     }));
   },
-  
+   
 rejectWithdrawal: async (txId, reason) => {
     await adminService.rejectWithdrawal(txId, reason).catch(console.error);
     set((state) => ({

@@ -12,6 +12,7 @@ import { FraudPage } from '@/pages/Fraud';
 import { CampaignsPage } from '@/pages/Campaigns';
 import { ModerationPage } from '@/pages/Moderation';
 import { MessagingPage } from '@/pages/Messaging';
+import { TransactionLogsPage } from '@/pages/TransactionLogs';
 import { AnalyticsPage } from '@/pages/Analytics';
 
 
@@ -32,6 +33,7 @@ import {
 import { CoinPackagesPage } from '@/pages/CoinPackagesPage';
 import { AdminPartnersPage } from '@/pages/AdminPartners';
 import { PaymentProcessPage } from '@/pages/PaymentProcess';
+import { PaymentProcessDetailPage } from '@/pages/PaymentProcessDetail';
 
 export const router = createBrowserRouter([
   {
@@ -90,11 +92,19 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
- {
+      {
         path: 'monetization',
         element: (
           <ProtectedRoute requiredPermission="view_monetization">
             <MonetizationPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'transactions',
+        element: (
+          <ProtectedRoute requiredPermission="view_monetization">
+            <TransactionLogsPage />
           </ProtectedRoute>
         ),
       },
@@ -110,7 +120,7 @@ export const router = createBrowserRouter([
         path: 'payment-process/:id',
         element: (
           <ProtectedRoute requiredPermission="view_monetization">
-            <PaymentProcessPage />
+            <PaymentProcessDetailPage />
           </ProtectedRoute>
         ),
       },

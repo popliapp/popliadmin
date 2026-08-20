@@ -159,6 +159,12 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
         permission: 'view_monetization',
       },
       {
+        title: 'Transaction Logs',
+        path: '/transactions',
+        icon: Wallet,
+        permission: 'view_monetization',
+      },
+      {
         title: 'Payment Process',
         path: '/payment-process',
         icon: Wallet,
