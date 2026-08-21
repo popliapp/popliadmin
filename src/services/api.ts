@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Use env variable or fallback to local backend port
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://popli-backend.onrender.com';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
